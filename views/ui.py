@@ -1,5 +1,5 @@
 import customtkinter as ctk
-from tkinter import messagebox
+from tkinter import ttk, messagebox
 from controllers.auth import AuthController
 from controllers.library import BookController, BorrowController, RequestController, NotificationController
 from PIL import Image

@@ -193,6 +193,40 @@ def init_db():
     END;
     ''')
 
+    # Sütun Migrasyonları (Eski veritabanı şemalarını otomatik güncellemek için)
+    try:
+        cursor.execute("ALTER TABLE members ADD COLUMN is_approved BOOLEAN DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        cursor.execute("ALTER TABLE members ADD COLUMN must_change_password BOOLEAN DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        cursor.execute("ALTER TABLE admins ADD COLUMN name TEXT DEFAULT 'Yönetici'")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        cursor.execute("ALTER TABLE admins ADD COLUMN email TEXT DEFAULT 'admin@lumina.com'")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        cursor.execute("ALTER TABLE books ADD COLUMN cover_image_url TEXT")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        cursor.execute("ALTER TABLE borrows ADD COLUMN member_name_snapshot TEXT NOT NULL DEFAULT ''")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        cursor.execute("ALTER TABLE borrows ADD COLUMN late_fee REAL DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        cursor.execute("ALTER TABLE book_requests ADD COLUMN cover_url TEXT")
+    except sqlite3.OperationalError:
+        pass
+
     # Varsayılan Admin Hesabını Oluştur (admin / admin123)
     cursor.execute("SELECT COUNT(*) FROM admins")
     if cursor.fetchone()[0] == 0:
