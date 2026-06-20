@@ -2,33 +2,38 @@ from models.database import get_connection
 import datetime
 import bcrypt
 import requests
+import sqlite3
 
 class BookController:
     @staticmethod
     def add_book(title, author, isbn, category, published_year, description, cover_image_url, total_copies):
         import random
-        # Benzersiz ISBN oluştur (Kullanıcı giriş yapsa bile tamamen ezer)
-        while True:
-            conn = get_connection()
-            cursor = conn.cursor()
-            new_isbn = "978" + str(random.randint(1000000000, 9999999999))
-            cursor.execute("SELECT id FROM books WHERE isbn = ?", (new_isbn,))
-            if not cursor.fetchone():
-                isbn = new_isbn
+        # Benzersiz ISBN oluştur (Sadece geçerli bir ISBN verilmediyse)
+        if not isbn or isbn.strip() in ("", "000000000"):
+            while True:
+                conn = get_connection()
+                cursor = conn.cursor()
+                new_isbn = "978" + str(random.randint(1000000000, 9999999999))
+                cursor.execute("SELECT id FROM books WHERE isbn = ?", (new_isbn,))
+                if not cursor.fetchone():
+                    isbn = new_isbn
+                    conn.close()
+                    break
                 conn.close()
-                break
-            conn.close()
             
         if not cover_image_url:
-            try:
-                r = requests.get(f"https://openlibrary.org/search.json?q={title}&limit=1", timeout=5)
-                docs = r.json().get("docs", [])
-                if docs:
-                    fetched_isbn = docs[0].get("isbn", [""])[0]
-                    if fetched_isbn:
-                        cover_image_url = f"https://covers.openlibrary.org/b/isbn/{fetched_isbn}-L.jpg"
-            except:
-                pass
+            if isbn and isbn.strip() not in ("", "000000000"):
+                cover_image_url = f"https://images-na.ssl-images-amazon.com/images/P/{isbn}.01._SCLZZZZZZZ_SX200_.jpg"
+            else:
+                try:
+                    r = requests.get(f"http://openlibrary.org/search.json?q={title}&limit=1", timeout=5)
+                    docs = r.json().get("docs", [])
+                    if docs:
+                        fetched_isbn = docs[0].get("isbn", [""])[0]
+                        if fetched_isbn:
+                            cover_image_url = f"https://images-na.ssl-images-amazon.com/images/P/{fetched_isbn}.01._SCLZZZZZZZ_SX200_.jpg"
+                except:
+                    pass
 
         conn = get_connection()
         cursor = conn.cursor()

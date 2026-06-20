@@ -138,7 +138,7 @@ class AdminBooksView(ctk.CTkFrame):
 
     def refresh(self):
         for i in self.tree.get_children(): self.tree.delete(i)
-        for b in BookController.get_all_books():
+        for b in BookController.get_all_books(limit=1000):
             # Hide description in the TreeView but pass it
             self.tree.insert("", "end", values=(b[0], b[1], b[2], b[3], b[4], b[5], b[8], b[9], b[6]))
 
@@ -191,11 +191,11 @@ class EditBookModal(ctk.CTkToplevel):
         
         def _fetch():
             try:
-                r = requests.get(f"https://openlibrary.org/search.json?q={t}&limit=1", timeout=5)
+                r = requests.get(f"http://openlibrary.org/search.json?q={t}&limit=1", timeout=5)
                 docs = r.json().get("docs", [])
                 if docs:
                     key = docs[0].get("key")
-                    r2 = requests.get(f"https://openlibrary.org{key}.json", timeout=5)
+                    r2 = requests.get(f"http://openlibrary.org{key}.json", timeout=5)
                     desc = r2.json().get("description", "Bu kitap için özet bulunamadı.")
                     if isinstance(desc, dict): desc = desc.get("value", "")
                     self.after(0, lambda d=desc: (self.desc_txt.delete("0.0", "end"), self.desc_txt.insert("0.0", d)))
@@ -373,7 +373,7 @@ class AdminOpenLibraryView(ctk.CTkFrame):
             try:
                 import urllib3
                 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-                r = requests.get(f"https://openlibrary.org/search.json?q={q}&limit=10", timeout=15, verify=False)
+                r = requests.get(f"http://openlibrary.org/search.json?q={q}&limit=10", timeout=15, verify=False)
                 docs = r.json().get("docs", [])
                 self.after(0, self._show_results, docs)
             except Exception as e:

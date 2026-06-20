@@ -552,9 +552,9 @@ class UserRequestView(ctk.CTkFrame):
         for w in self.scroll.winfo_children(): w.destroy()
         ctk.CTkLabel(self.scroll, text="💡 Popüler İstek Önerileri", font=ctk.CTkFont(size=18, weight="bold")).pack(anchor="w", pady=10)
         recs = [
-            ("Harry Potter and the Sorcerer's Stone", "J.K. Rowling", "9780590353427", "https://covers.openlibrary.org/b/isbn/9780590353427-M.jpg"),
-            ("1984", "George Orwell", "9780451524935", "https://covers.openlibrary.org/b/isbn/9780451524935-M.jpg"),
-            ("The Great Gatsby", "F. Scott Fitzgerald", "9780743273565", "https://covers.openlibrary.org/b/isbn/9780743273565-M.jpg")
+            ("Harry Potter and the Sorcerer's Stone", "J.K. Rowling", "9780590353427", "https://images-na.ssl-images-amazon.com/images/P/9780590353427.01._SCLZZZZZZZ_SX200_.jpg"),
+            ("1984", "George Orwell", "9780451524935", "https://images-na.ssl-images-amazon.com/images/P/9780451524935.01._SCLZZZZZZZ_SX200_.jpg"),
+            ("The Great Gatsby", "F. Scott Fitzgerald", "9780743273565", "https://images-na.ssl-images-amazon.com/images/P/9780743273565.01._SCLZZZZZZZ_SX200_.jpg")
         ]
         for title, author, isbn, cover in recs:
             self.build_result_card(title, author, isbn, cover)
@@ -570,7 +570,7 @@ class UserRequestView(ctk.CTkFrame):
             try:
                 import urllib3
                 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-                r = requests.get(f"https://openlibrary.org/search.json?q={q}&limit=5", timeout=15, verify=False)
+                r = requests.get(f"http://openlibrary.org/search.json?q={q}&limit=5", timeout=15, verify=False)
                 docs = r.json().get("docs", [])
                 self.after(0, self._show_results, docs)
             except Exception as e:
@@ -585,7 +585,7 @@ class UserRequestView(ctk.CTkFrame):
             t = d.get("title", "Bilinmiyor")
             a = d.get("author_name", ["Bilinmiyor"])[0]
             isbn = d.get("isbn", ["000000"])[0]
-            cov = f"https://covers.openlibrary.org/b/isbn/{isbn}-M.jpg"
+            cov = f"https://images-na.ssl-images-amazon.com/images/P/{isbn}.01._SCLZZZZZZZ_SX200_.jpg" if isbn and isbn != "000000" else ""
             self.build_result_card(t, a, isbn, cov)
 
     def build_result_card(self, t, a, i, c_url):
