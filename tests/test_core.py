@@ -15,12 +15,19 @@ def teardown_module(module):
     if os.path.exists("test_library.db"): os.remove("test_library.db")
 
 def test_admin_login():
-    assert AuthController.login_admin("admin", "admin123") == True
-    assert AuthController.login_admin("admin", "wrong") == False
+    assert AuthController.login_admin("admin", "admin123")[0] == True
+    assert AuthController.login_admin("admin", "wrong")[0] == False
 
 def test_member_registration_and_login():
     assert MemberController.add_member("Ali Yılmaz", "ali@mail.com", "555", "pass123")[0] == True
-    user = AuthController.login_member("ali@mail.com", "pass123")
+    
+    # Yeni üyenin girişi için önce onaylanması gerekiyor
+    pending = MemberController.get_pending_members()
+    assert len(pending) == 1
+    m_id = pending[0][0]
+    MemberController.approve_member(m_id)
+    
+    user, msg = AuthController.login("ali@mail.com", "pass123")
     assert user is not None
     assert user["name"] == "Ali Yılmaz"
 

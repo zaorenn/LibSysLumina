@@ -1,407 +1,754 @@
 import customtkinter as ctk
 from tkinter import messagebox
+from controllers.auth import AuthController
+from controllers.library import BookController, BorrowController, RequestController, NotificationController
 from PIL import Image
-import requests
+import urllib.request
 import io
 import threading
-from controllers.auth import AuthController
-from controllers.library import BookController, MemberController, BorrowController
+import requests
 
-class ThemeSelectionView(ctk.CTkFrame):
-    def __init__(self, master, on_complete):
+# macOS Colors (Light, Dark)
+APPLE_BG = ("#F2F2F7", "#1E1E1E")
+APPLE_PANEL = ("#FFFFFF", "#2C2C2E")
+APPLE_BLUE = ("#007AFF", "#0A84FF")
+APPLE_GREEN = ("#34C759", "#30D158")
+APPLE_RED = ("#FF3B30", "#FF453A")
+APPLE_ORANGE = ("#FF9500", "#FF9F0A")
+APPLE_TEXT = ("#000000", "#FFFFFF")
+APPLE_TEXT_MUTED = ("#8E8E93", "#8E8E93")
+
+def get_icon(name, size=20):
+    try:
+        l_img = Image.open(f"assets/icons/{name}_b.png")
+        d_img = Image.open(f"assets/icons/{name}_w.png")
+        return ctk.CTkImage(light_image=l_img, dark_image=d_img, size=(size, size))
+    except:
+        return None
+
+def get_single_icon(name, size=20):
+    try:
+        return ctk.CTkImage(light_image=Image.open(f"assets/icons/{name}"), size=(size, size))
+    except:
+        return None
+
+def apply_treeview_style():
+    style = ttk.Style()
+    style.theme_use("default")
+    mode = ctk.get_appearance_mode()
+    bg = "#FFFFFF" if mode == "Light" else "#2C2C2E"
+    fg = "#000000" if mode == "Light" else "#FFFFFF"
+    h_bg = "#E5E5EA" if mode == "Light" else "#3A3A3C"
+    sel_bg = "#007AFF" if mode == "Light" else "#0A84FF"
+    
+    style.configure("Treeview", rowheight=35, font=("San Francisco", 11), background=bg, fieldbackground=bg, foreground=fg, borderwidth=0)
+    style.configure("Treeview.Heading", font=("San Francisco", 12, "bold"), background=h_bg, foreground=fg, borderwidth=0)
+    style.map('Treeview', background=[('selected', sel_bg)])
+
+class AnimatedButton(ctk.CTkButton):
+    def __init__(self, master, fg_color=APPLE_BLUE, hover_color="#005ecb", **kwargs):
+        h = kwargs.pop("height", 32)
+        f = kwargs.pop("font", ctk.CTkFont(family="San Francisco", size=13))
+        super().__init__(master, fg_color=fg_color, hover_color=hover_color, corner_radius=6, height=h, font=f, **kwargs)
+
+class GlassFrame(ctk.CTkFrame):
+    def __init__(self, master, **kwargs):
+        cr = kwargs.pop("corner_radius", 12)
+        super().__init__(master, fg_color=APPLE_PANEL, corner_radius=cr, border_width=1, border_color="#3A3A3C", **kwargs)
+
+class CatalogCard(GlassFrame):
+    def __init__(self, master, book, on_borrow):
         super().__init__(master)
-        self.on_complete = on_complete
-        self.pack(fill="both", expand=True)
+        self.book = book
+        self.pack_propagate(False)
+        self.configure(width=260, height=360)
         
-        self.bg_frame = ctk.CTkFrame(self)
-        self.bg_frame.pack(fill="both", expand=True)
+        b_id, title, author, isbn, cat, year, desc, url, total, avail = book
         
-        self.center_frame = ctk.CTkFrame(self.bg_frame, width=500, height=450, corner_radius=20)
-        self.center_frame.place(relx=0.5, rely=0.5, anchor="center")
+        self.cover_frame = ctk.CTkFrame(self, fg_color="transparent", height=180)
+        self.cover_frame.pack(fill="x", padx=10, pady=(10, 5))
+        self.cover_frame.pack_propagate(False)
         
-        self.title_label = ctk.CTkLabel(self.center_frame, text="Hoş Geldiniz", font=ctk.CTkFont(size=32, weight="bold"))
-        self.title_label.pack(pady=(40, 20))
+        self.cover_lbl = ctk.CTkLabel(self.cover_frame, text="📖", font=ctk.CTkFont(size=50), text_color=APPLE_TEXT_MUTED)
+        self.cover_lbl.pack(expand=True)
         
-        self.sub_label = ctk.CTkLabel(self.center_frame, text="Lütfen uygulama temanızı seçin", font=ctk.CTkFont(size=16), text_color="gray")
-        self.sub_label.pack(pady=(0, 30))
+        if url and url.startswith("http"):
+            self.load_image(url)
         
-        # Tema Seçimi (Dark/Light)
-        self.mode_var = ctk.StringVar(value="Dark")
-        self.mode_segmented = ctk.CTkSegmentedButton(self.center_frame, values=["Dark", "Light"], variable=self.mode_var, command=self.change_mode, width=300, height=40)
-        self.mode_segmented.pack(pady=(0, 20))
+        self.info_frame = ctk.CTkFrame(self, fg_color="transparent")
+        self.info_frame.pack(fill="both", expand=True, padx=15, pady=5)
         
-        # Vurgu Rengi Seçimi
-        self.color_var = ctk.StringVar(value="blue")
-        self.color_segmented = ctk.CTkSegmentedButton(self.center_frame, values=["blue", "dark-blue", "green"], variable=self.color_var, command=self.change_color, width=300, height=40)
-        self.color_segmented.pack(pady=(0, 40))
+        title_lbl = ctk.CTkLabel(self.info_frame, text=title[:25] + ("..." if len(title)>25 else ""), 
+                                 font=ctk.CTkFont(family="San Francisco", size=15, weight="bold"), text_color=APPLE_TEXT)
+        title_lbl.pack(anchor="w")
         
-        self.continue_btn = ctk.CTkButton(self.center_frame, text="Uygulamaya Devam Et", width=300, height=50, corner_radius=10, 
-                                       font=ctk.CTkFont(size=16, weight="bold"), command=self.on_complete)
-        self.continue_btn.pack()
-
-    def change_mode(self, value):
-        ctk.set_appearance_mode(value)
+        author_lbl = ctk.CTkLabel(self.info_frame, text=f"👤 {author}", 
+                                  font=ctk.CTkFont(size=12), text_color=APPLE_TEXT_MUTED)
+        author_lbl.pack(anchor="w", pady=(2, 10))
         
-    def change_color(self, value):
-        ctk.set_default_color_theme(value)
-        # Uyarı: Renk teması değişimi genellikle anlık olmaz, pencerenin yeniden çizilmesini veya uygulamanın yeniden başlatılmasını gerektirebilir, 
-        # ancak CustomTkinter bazı renkleri anında günceller.
-
-
-class MemberLoginView(ctk.CTkFrame):
-    def __init__(self, master, on_login_success, on_register_click, on_back):
-        super().__init__(master)
-        self.on_login_success = on_login_success
-        self.on_register_click = on_register_click
-        self.on_back = on_back
-        self.pack(fill="both", expand=True)
+        bot_frame = ctk.CTkFrame(self.info_frame, fg_color="transparent")
+        bot_frame.pack(fill="x", side="bottom", pady=10)
         
-        self.bg_frame = ctk.CTkFrame(self)
-        self.bg_frame.pack(fill="both", expand=True)
-        
-        self.back_btn = ctk.CTkButton(self.bg_frame, text="← Geri Dön", fg_color="transparent", width=100, command=self.on_back)
-        self.back_btn.place(x=20, y=20)
-        
-        self.center_frame = ctk.CTkFrame(self.bg_frame, width=450, height=550, corner_radius=20)
-        self.center_frame.place(relx=0.5, rely=0.5, anchor="center")
-        
-        self.title_label = ctk.CTkLabel(self.center_frame, text="Üye Girişi", font=ctk.CTkFont(size=28, weight="bold"))
-        self.title_label.pack(pady=(50, 40))
-        
-        self.email_entry = ctk.CTkEntry(self.center_frame, placeholder_text="E-posta", width=300, height=45, corner_radius=10)
-        self.email_entry.pack(pady=(0, 20))
-        
-        self.password_entry = ctk.CTkEntry(self.center_frame, placeholder_text="Şifre", show="*", width=300, height=45, corner_radius=10)
-        self.password_entry.pack(pady=(0, 30))
-        
-        self.login_btn = ctk.CTkButton(self.center_frame, text="Giriş Yap", width=300, height=45, corner_radius=10, 
-                                       font=ctk.CTkFont(size=15, weight="bold"), command=self.handle_login)
-        self.login_btn.pack(pady=(0, 20))
-        
-        self.register_btn = ctk.CTkButton(self.center_frame, text="Hesabın yok mu? Kayıt Ol", width=300, height=45, corner_radius=10, 
-                                          fg_color="transparent", border_width=2, command=self.on_register_click)
-        self.register_btn.pack()
-        
-        self.error_label = ctk.CTkLabel(self.center_frame, text="", text_color="#EF4444")
-        self.error_label.pack(pady=(20, 0))
-
-    def handle_login(self):
-        email = self.email_entry.get()
-        password = self.password_entry.get()
-        user_data = AuthController.login_member(email, password)
-        if user_data:
-            self.error_label.configure(text="")
-            self.on_login_success(user_data)
+        if avail > 0:
+            status_text = f"✨ Stok: {avail}"
+            color = APPLE_GREEN
+            btn_state = "normal"
+            btn_text = "Ödünç Al"
         else:
-            self.error_label.configure(text="Hatalı e-posta veya şifre!")
+            status_text = "🚫 Tükendi"
+            color = APPLE_RED
+            btn_state = "disabled"
+            btn_text = "Bekleniyor"
+            
+        ctk.CTkLabel(bot_frame, text=status_text, font=ctk.CTkFont(size=12, weight="bold"), text_color=color).pack(side="left")
+        
+        self.borrow_btn = AnimatedButton(bot_frame, text=btn_text, width=80, state=btn_state, command=lambda: on_borrow(b_id))
+        self.borrow_btn.pack(side="right")
+        
+        self.detail_btn = AnimatedButton(bot_frame, text="Detaylar", width=70, fg_color=APPLE_PANEL, hover_color="#3A3A3C", text_color=APPLE_TEXT, border_width=1, border_color="#3A3A3C", command=lambda: BookDetailModal(self.winfo_toplevel(), book, on_borrow))
+        self.detail_btn.pack(side="right", padx=(0, 5))
 
+    def load_image(self, url):
+        def _fetch():
+            try:
+                req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+                raw_data = urllib.request.urlopen(req, timeout=5).read()
+                img = Image.open(io.BytesIO(raw_data))
+                ctk_img = ctk.CTkImage(img, size=(120, 160))
+                self.cover_lbl.after(0, lambda: self.cover_lbl.configure(image=ctk_img, text=""))
+            except: pass
+        threading.Thread(target=_fetch, daemon=True).start()
 
-class MemberRegisterView(ctk.CTkFrame):
-    def __init__(self, master, on_register_success, on_login_click):
+class BookDetailModal(ctk.CTkToplevel):
+    def __init__(self, master, book, on_borrow):
         super().__init__(master)
-        self.on_register_success = on_register_success
-        self.on_login_click = on_login_click
-        self.pack(fill="both", expand=True)
+        self.title("Kitap Detayları")
+        self.geometry("600x700")
+        self.configure(fg_color=APPLE_BG)
+        self.grab_set()
         
-        self.bg_frame = ctk.CTkFrame(self)
-        self.bg_frame.pack(fill="both", expand=True)
+        b_id, title, author, isbn, cat, year, desc, url, total, avail = book
         
-        self.center_frame = ctk.CTkFrame(self.bg_frame, width=450, height=650, corner_radius=20)
-        self.center_frame.place(relx=0.5, rely=0.5, anchor="center")
+        self.top = ctk.CTkFrame(self, fg_color="transparent")
+        self.top.pack(fill="x", padx=20, pady=20)
         
-        self.title_label = ctk.CTkLabel(self.center_frame, text="Yeni Hesap Oluştur", font=ctk.CTkFont(size=28, weight="bold"))
-        self.title_label.pack(pady=(40, 30))
+        self.cover_lbl = ctk.CTkLabel(self.top, text="📖", font=ctk.CTkFont(size=100), text_color=APPLE_TEXT_MUTED)
+        self.cover_lbl.pack(side="left", padx=(0, 20))
+        if url and url.startswith("http"):
+            self.load_image(url)
+            
+        self.info = ctk.CTkFrame(self.top, fg_color="transparent")
+        self.info.pack(side="left", fill="both", expand=True)
         
-        self.name_entry = ctk.CTkEntry(self.center_frame, placeholder_text="Ad Soyad", width=300, height=45, corner_radius=10)
-        self.name_entry.pack(pady=(0, 20))
+        ctk.CTkLabel(self.info, text=title, font=ctk.CTkFont(family="San Francisco", size=24, weight="bold"), wraplength=350, justify="left").pack(anchor="w")
+        ctk.CTkLabel(self.info, text=f"👤 Yazar: {author}", font=ctk.CTkFont(size=16), text_color=APPLE_TEXT_MUTED).pack(anchor="w", pady=(5,0))
+        ctk.CTkLabel(self.info, text=f"🏷️ Kategori: {cat} | 📅 Yıl: {year}", font=ctk.CTkFont(size=14), text_color=APPLE_TEXT_MUTED).pack(anchor="w")
+        ctk.CTkLabel(self.info, text=f"ISBN: {isbn}", font=ctk.CTkFont(size=14), text_color=APPLE_TEXT_MUTED).pack(anchor="w")
         
-        self.email_entry = ctk.CTkEntry(self.center_frame, placeholder_text="E-posta", width=300, height=45, corner_radius=10)
-        self.email_entry.pack(pady=(0, 20))
-        
-        self.phone_entry = ctk.CTkEntry(self.center_frame, placeholder_text="Telefon", width=300, height=45, corner_radius=10)
-        self.phone_entry.pack(pady=(0, 20))
-
-        self.password_entry = ctk.CTkEntry(self.center_frame, placeholder_text="Şifre", show="*", width=300, height=45, corner_radius=10)
-        self.password_entry.pack(pady=(0, 30))
-        
-        self.register_btn = ctk.CTkButton(self.center_frame, text="Kayıt Ol", width=300, height=45, corner_radius=10, 
-                                       font=ctk.CTkFont(size=15, weight="bold"), command=self.handle_register)
-        self.register_btn.pack(pady=(0, 20))
-        
-        self.login_btn = ctk.CTkButton(self.center_frame, text="Zaten hesabın var mı? Giriş Yap", width=300, height=45, corner_radius=10, 
-                                          fg_color="transparent", border_width=2, command=self.on_login_click)
-        self.login_btn.pack()
-
-    def handle_register(self):
-        success, msg = MemberController.add_member(
-            self.name_entry.get(),
-            self.email_entry.get(),
-            self.phone_entry.get(),
-            self.password_entry.get()
-        )
-        if success:
-            messagebox.showinfo("Başarılı", "Kayıt işlemi başarılı! Lütfen giriş yapın.")
-            self.on_login_click()
+        if avail > 0:
+            status = f"✨ Stok: {avail}"
+            color = APPLE_GREEN
+            btn_state = "normal"
         else:
-            messagebox.showerror("Hata", msg)
+            status = "🚫 Tükendi"
+            color = APPLE_RED
+            btn_state = "disabled"
+        
+        ctk.CTkLabel(self.info, text=status, font=ctk.CTkFont(size=16, weight="bold"), text_color=color).pack(anchor="w", pady=(15, 5))
+        AnimatedButton(self.info, text="Ödünç Al", width=150, height=40, font=ctk.CTkFont(size=16, weight="bold"), state=btn_state, command=lambda: self.handle_borrow(on_borrow, b_id)).pack(anchor="w")
+        
+        self.desc_frame = GlassFrame(self, height=120)
+        self.desc_frame.pack(fill="x", padx=20, pady=10)
+        self.desc_frame.pack_propagate(False)
+        ctk.CTkLabel(self.desc_frame, text="Kitap Özeti", font=ctk.CTkFont(size=16, weight="bold")).pack(anchor="w", padx=15, pady=(10, 5))
+        ctk.CTkLabel(self.desc_frame, text=desc if desc else "Bu kitap için henüz bir özet bulunmuyor.", text_color=APPLE_TEXT_MUTED, wraplength=520, justify="left").pack(anchor="w", padx=15)
+        
+        self.borrowers_frame = GlassFrame(self)
+        self.borrowers_frame.pack(fill="both", expand=True, padx=20, pady=(10, 20))
+        ctk.CTkLabel(self.borrowers_frame, text="Şu An Ödünç Alanlar", font=ctk.CTkFont(size=16, weight="bold")).pack(anchor="w", padx=15, pady=(10, 5))
+        
+        borrowers = BorrowController.get_active_borrowers_by_book(b_id)
+        if not borrowers:
+            ctk.CTkLabel(self.borrowers_frame, text="Şu an bu kitabı ödünç alan kimse yok.", text_color=APPLE_TEXT_MUTED).pack(anchor="w", padx=15, pady=5)
+        else:
+            for b_name, b_date in borrowers:
+                f = ctk.CTkFrame(self.borrowers_frame, fg_color="transparent")
+                f.pack(fill="x", padx=15, pady=5)
+                ctk.CTkLabel(f, text=f"👤 {b_name}", font=ctk.CTkFont(size=14)).pack(side="left")
+                ctk.CTkLabel(f, text=f"⏳ Aldığı Tarih: {b_date}", font=ctk.CTkFont(size=12), text_color=APPLE_TEXT_MUTED).pack(side="right")
+
+    def handle_borrow(self, on_borrow, b_id):
+        self.destroy()
+        on_borrow(b_id)
+
+    def load_image(self, url):
+        def _fetch():
+            try:
+                req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+                raw_data = urllib.request.urlopen(req, timeout=5).read()
+                img = Image.open(io.BytesIO(raw_data))
+                ctk_img = ctk.CTkImage(img, size=(160, 240))
+                self.cover_lbl.after(0, lambda: self.cover_lbl.configure(image=ctk_img, text=""))
+            except: pass
+        threading.Thread(target=_fetch, daemon=True).start()
+
+class AuthModal(ctk.CTkToplevel):
+    def __init__(self, master, on_success):
+        super().__init__(master)
+        self.title("Kütüphane Girişi")
+        self.geometry("400x550")
+        self.configure(fg_color=APPLE_BG)
+        self.on_success = on_success
+        self.grab_set() 
+        self.current_frame = None
+        self.show_login()
+
+    def show_login(self):
+        if self.current_frame: self.current_frame.destroy()
+        self.current_frame = ctk.CTkFrame(self, fg_color="transparent")
+        self.current_frame.pack(fill="both", expand=True)
+        
+        ctk.CTkLabel(self.current_frame, text=" Lumina", font=ctk.CTkFont(family="San Francisco", size=32, weight="bold")).pack(pady=(40, 10))
+        ctk.CTkLabel(self.current_frame, text="Lütfen giriş yapın", text_color=APPLE_TEXT_MUTED).pack(pady=(0, 30))
+        
+        self.email_entry = ctk.CTkEntry(self.current_frame, placeholder_text="E-posta", width=260, height=36, corner_radius=6)
+        self.email_entry.pack(pady=8)
+        self.pass_entry = ctk.CTkEntry(self.current_frame, placeholder_text="Şifre", show="●", width=260, height=36, corner_radius=6)
+        self.pass_entry.pack(pady=8)
+        
+        self.chk_login = ctk.CTkCheckBox(self.current_frame, text="Şifreyi Göster", command=lambda: self.toggle_pw(self.pass_entry, self.chk_login))
+        self.chk_login.pack(pady=5)
+        
+        AnimatedButton(self.current_frame, text="Giriş Yap", width=260, command=self.do_login).pack(pady=20)
+        self.err = ctk.CTkLabel(self.current_frame, text="", text_color=APPLE_RED)
+        self.err.pack()
+        ctk.CTkButton(self.current_frame, text="Hesabın yok mu? Kayıt Ol", fg_color="transparent", hover_color=APPLE_PANEL, text_color=APPLE_BLUE, command=self.show_register).pack(side="bottom", pady=20)
+
+    def show_register(self):
+        if self.current_frame: self.current_frame.destroy()
+        self.current_frame = ctk.CTkFrame(self, fg_color="transparent")
+        self.current_frame.pack(fill="both", expand=True)
+        
+        ctk.CTkLabel(self.current_frame, text="Yeni Hesap", font=ctk.CTkFont(family="San Francisco", size=28, weight="bold")).pack(pady=(30, 20))
+        
+        self.r_name = ctk.CTkEntry(self.current_frame, placeholder_text="Ad Soyad", width=260, height=36, corner_radius=6)
+        self.r_name.pack(pady=5)
+        self.r_email = ctk.CTkEntry(self.current_frame, placeholder_text="E-posta", width=260, height=36, corner_radius=6)
+        self.r_email.pack(pady=5)
+        self.r_phone = ctk.CTkEntry(self.current_frame, placeholder_text="Telefon", width=260, height=36, corner_radius=6)
+        self.r_phone.pack(pady=5)
+        self.r_pass = ctk.CTkEntry(self.current_frame, placeholder_text="Şifre", show="●", width=260, height=36, corner_radius=6)
+        self.r_pass.pack(pady=5)
+        
+        self.chk_reg = ctk.CTkCheckBox(self.current_frame, text="Şifreyi Göster", command=lambda: self.toggle_pw(self.r_pass, self.chk_reg))
+        self.chk_reg.pack(pady=5)
+        
+        AnimatedButton(self.current_frame, text="Kayıt Ol", width=260, command=self.do_register).pack(pady=20)
+        self.err = ctk.CTkLabel(self.current_frame, text="", text_color=APPLE_RED)
+        self.err.pack()
+        ctk.CTkButton(self.current_frame, text="Geri Dön", fg_color="transparent", hover_color=APPLE_PANEL, text_color=APPLE_TEXT_MUTED, command=self.show_login).pack(side="bottom", pady=20)
+
+    def toggle_pw(self, entry, chk):
+        if chk.get() == 1: entry.configure(show="")
+        else: entry.configure(show="●")
+
+    def do_login(self):
+        user, msg = AuthController.login(self.email_entry.get(), self.pass_entry.get())
+        if user:
+            self.on_success(user)
+            self.destroy()
+        else:
+            self.err.configure(text=msg)
+            
+    def do_register(self):
+        succ, msg = AuthController.register(self.r_name.get(), self.r_email.get(), self.r_phone.get(), self.r_pass.get())
+        if succ:
+            messagebox.showinfo("Başarılı", msg)
+            self.show_login()
+        else:
+            self.err.configure(text=msg)
 
 
 class CatalogView(ctk.CTkFrame):
-    def __init__(self, master, get_current_user, require_login):
+    def __init__(self, master, main_app):
         super().__init__(master, fg_color="transparent")
-        self.get_current_user = get_current_user
-        self.require_login = require_login
+        self.main_app = main_app
+        self.offset = 0
+        self.limit = 20
+        self.query = ""
+        self.books = []
+        self.cards = []
+        self.is_loading = False
         
-        self.header_frame = ctk.CTkFrame(self, fg_color="transparent", height=80)
-        self.header_frame.pack(fill="x", padx=40, pady=(40, 20))
+        self.top_bar = ctk.CTkFrame(self, fg_color="transparent", height=80)
+        self.top_bar.pack(fill="x", padx=40, pady=(40, 10))
         
-        self.title_lbl = ctk.CTkLabel(self.header_frame, text="Kitap Kataloğu", font=ctk.CTkFont(size=32, weight="bold"))
+        self.title_lbl = ctk.CTkLabel(self.top_bar, text="Kütüphaneyi Keşfet", font=ctk.CTkFont(size=28, weight="bold"))
         self.title_lbl.pack(side="left")
         
-        self.search_entry = ctk.CTkEntry(self.header_frame, placeholder_text="Kitap ara...", width=300, height=40, corner_radius=20)
+        self.search_entry = ctk.CTkEntry(self.top_bar, placeholder_text="Kitap veya Yazar Ara...", width=250, height=36, corner_radius=18, border_color="#3A3A3C")
         self.search_entry.pack(side="right")
         self.search_entry.bind("<KeyRelease>", self.on_search)
         
-        self.scrollable_frame = ctk.CTkScrollableFrame(self, fg_color="transparent")
-        self.scrollable_frame.pack(fill="both", expand=True, padx=30, pady=(0, 30))
+        self.scroll = ctk.CTkScrollableFrame(self, fg_color="transparent")
+        self.scroll.pack(fill="both", expand=True, padx=40)
         
-        # Grid variables
-        self.columns = 4
-        self.image_cache = {}
+        self.grid_frame = ctk.CTkFrame(self.scroll, fg_color="transparent")
+        self.grid_frame.pack(fill="both", expand=True)
+        
+        self.scroll.bind("<Configure>", self.on_resize)
+        self.scroll._parent_canvas.bind("<MouseWheel>", self.on_scroll, add="+")
         
         self.load_books()
 
-    def load_image_from_url(self, url, label):
-        if not url or url == "None":
-            return
-            
-        def fetch():
-            if url in self.image_cache:
-                img = self.image_cache[url]
-            else:
-                try:
-                    response = requests.get(url, timeout=5)
-                    image_data = Image.open(io.BytesIO(response.content))
-                    img = ctk.CTkImage(light_image=image_data, dark_image=image_data, size=(130, 200))
-                    self.image_cache[url] = img
-                except:
-                    return
-            label.after(0, lambda: label.configure(image=img, text=""))
-            
-        threading.Thread(target=fetch, daemon=True).start()
+    def on_search(self, e):
+        self.query = self.search_entry.get()
+        self.offset = 0
+        for c in self.cards: c.destroy()
+        self.cards.clear()
+        self.books.clear()
+        self.load_books()
 
-    def on_search(self, event):
-        self.load_books(self.search_entry.get())
-
-    def load_books(self, search_term=""):
-        for widget in self.scrollable_frame.winfo_children():
-            widget.destroy()
-            
-        books = BookController.get_all_books(search_term)
+    def load_books(self):
+        if self.is_loading: return
+        self.is_loading = True
         
-        row, col = 0, 0
-        for b in books:
-            book_id, title, author, isbn, category, year, desc, url, total, avail = b
-            
-            card = ctk.CTkFrame(self.scrollable_frame, width=220, height=380, corner_radius=15)
-            card.pack_propagate(False)
-            card.grid(row=row, column=col, padx=20, pady=20)
-            
-            img_lbl = ctk.CTkLabel(card, text="Yükleniyor...", width=130, height=200, corner_radius=10, fg_color="gray")
-            img_lbl.pack(pady=(15, 10))
-            self.load_image_from_url(url, img_lbl)
-            
-            title_lbl = ctk.CTkLabel(card, text=title[:22] + ("..." if len(title)>22 else ""), font=ctk.CTkFont(size=14, weight="bold"))
-            title_lbl.pack()
-            
-            author_lbl = ctk.CTkLabel(card, text=author[:25], font=ctk.CTkFont(size=12), text_color="gray")
-            author_lbl.pack()
-            
-            avail_color = "#10B981" if avail > 0 else "#EF4444"
-            avail_text = f"Stok: {avail}/{total}"
-            avail_lbl = ctk.CTkLabel(card, text=avail_text, font=ctk.CTkFont(size=12, weight="bold"), text_color=avail_color)
-            avail_lbl.pack(pady=(5, 10))
-            
-            borrow_btn = ctk.CTkButton(card, text="Ödünç Al" if avail > 0 else "Stokta Yok", 
-                                       state="normal" if avail > 0 else "disabled",
-                                       command=lambda bid=book_id: self.borrow_book(bid))
-            borrow_btn.pack(side="bottom", pady=(0, 15))
-            
-            col += 1
-            if col >= self.columns:
-                col = 0
-                row += 1
-
-    def borrow_book(self, book_id):
-        user = self.get_current_user()
-        if not user:
-            # Login gerekli
-            self.require_login()
+        def _fetch():
+            new_books = BookController.get_all_books(self.query, self.limit, self.offset)
+            self.after(0, self._render_new_books, new_books)
+        threading.Thread(target=_fetch, daemon=True).start()
+        
+    def _render_new_books(self, new_books):
+        if not new_books: 
+            self.is_loading = False
             return
+        self.books.extend(new_books)
+        self.offset += len(new_books)
+        for b in new_books:
+            card = CatalogCard(self.grid_frame, b, self.on_borrow)
+            self.cards.append(card)
+        self.rearrange_grid()
+        self.is_loading = False
+        
+    def on_resize(self, event):
+        self.rearrange_grid()
+        
+    def rearrange_grid(self):
+        w = self.scroll.winfo_width()
+        if w < 300: return
+        cols = max(1, w // 280)
+        for i, card in enumerate(self.cards):
+            card.grid(row=i // cols, column=i % cols, padx=10, pady=15)
+            
+    def on_scroll(self, event):
+        if self.scroll._parent_canvas.yview()[1] > 0.95:
+            self.load_books()
 
-        success, msg = BorrowController.borrow_book(book_id, user["id"])
-        if success:
-            messagebox.showinfo("Başarılı", "Kitap başarıyla ödünç alındı. Profilinizden takip edebilirsiniz.")
-            self.load_books(self.search_entry.get())
-        else:
-            messagebox.showerror("Hata", msg)
+    def on_borrow(self, book_id):
+        if not self.main_app.user:
+            AuthModal(self.winfo_toplevel(), self.main_app.on_login_success)
+            return
+        if messagebox.askyesno("Onay", "Bu kitabı ödünç almak istiyor musunuz?"):
+            success, msg = BorrowController.borrow_book(book_id, self.main_app.user["id"])
+            if success:
+                messagebox.showinfo("Başarılı", "Kitap profilinize eklendi.")
+                self.load_books()
+            else:
+                messagebox.showerror("Hata", msg)
 
 
 class ProfileView(ctk.CTkFrame):
-    def __init__(self, master, current_user):
+    def __init__(self, master, main_app):
         super().__init__(master, fg_color="transparent")
-        self.current_user = current_user
-        
-        self.header_frame = ctk.CTkFrame(self, fg_color="transparent", height=80)
-        self.header_frame.pack(fill="x", padx=40, pady=(40, 20))
-        
-        self.title_lbl = ctk.CTkLabel(self.header_frame, text=f"Merhaba, {self.current_user['name']}", font=ctk.CTkFont(size=32, weight="bold"))
-        self.title_lbl.pack(side="left")
-        
-        self.sub_lbl = ctk.CTkLabel(self, text="Ödünç Aldığınız Kitaplar", font=ctk.CTkFont(size=20, weight="bold"), text_color="gray")
-        self.sub_lbl.pack(anchor="w", padx=40, pady=(0, 20))
-        
-        self.scrollable_frame = ctk.CTkScrollableFrame(self, fg_color="transparent")
-        self.scrollable_frame.pack(fill="both", expand=True, padx=30, pady=(0, 30))
-        
-        self.load_borrows()
+        self.main_app = main_app
+        ctk.CTkLabel(self, text="Hesap Bilgileri", font=ctk.CTkFont(size=28, weight="bold")).pack(anchor="w", padx=40, pady=(40, 20))
+        self.scroll = ctk.CTkScrollableFrame(self, fg_color="transparent")
+        self.scroll.pack(fill="both", expand=True, padx=40)
+        self.load_history()
 
-    def load_borrows(self):
-        borrows = BorrowController.get_member_borrows(self.current_user["id"])
+    def load_history(self):
+        for w in self.scroll.winfo_children(): w.destroy()
+        if not self.main_app.user: return
         
-        for widget in self.scrollable_frame.winfo_children():
-            widget.destroy()
+        pw_frame = GlassFrame(self.scroll)
+        pw_frame.pack(fill="x", pady=(0, 20))
+        ctk.CTkLabel(pw_frame, text="🔑 Şifre Değiştir", font=ctk.CTkFont(size=18, weight="bold")).pack(anchor="w", padx=20, pady=(20, 10))
+        
+        self.old_pw = ctk.CTkEntry(pw_frame, placeholder_text="Mevcut Şifre", show="●", width=300, height=36)
+        self.old_pw.pack(anchor="w", padx=20, pady=5)
+        self.new_pw1 = ctk.CTkEntry(pw_frame, placeholder_text="Yeni Şifre", show="●", width=300, height=36)
+        self.new_pw1.pack(anchor="w", padx=20, pady=5)
+        self.new_pw2 = ctk.CTkEntry(pw_frame, placeholder_text="Yeni Şifre (Tekrar)", show="●", width=300, height=36)
+        self.new_pw2.pack(anchor="w", padx=20, pady=5)
+        
+        self.chk_pw = ctk.CTkCheckBox(pw_frame, text="Şifreleri Göster", command=self.toggle_pw)
+        self.chk_pw.pack(anchor="w", padx=20, pady=5)
+        
+        AnimatedButton(pw_frame, text="Şifreyi Güncelle", width=300, command=self.change_pw).pack(anchor="w", padx=20, pady=15)
+        
+        req_frame = GlassFrame(self.scroll)
+        req_frame.pack(fill="x", pady=(0, 20))
+        ctk.CTkLabel(req_frame, text="✏️ Bilgilerimi Güncelle", font=ctk.CTkFont(size=18, weight="bold")).pack(anchor="w", padx=20, pady=(20, 10))
+        ctk.CTkLabel(req_frame, text="Güvenlik nedeniyle ad ve e-posta değişiklikleri yönetici onayına tabidir.", text_color=APPLE_TEXT_MUTED).pack(anchor="w", padx=20, pady=(0, 10))
+        self.new_name = ctk.CTkEntry(req_frame, placeholder_text="Yeni Ad Soyad", width=300, height=36)
+        self.new_name.pack(anchor="w", padx=20, pady=5)
+        self.new_email = ctk.CTkEntry(req_frame, placeholder_text="Yeni E-posta", width=300, height=36)
+        self.new_email.pack(anchor="w", padx=20, pady=5)
+        AnimatedButton(req_frame, text="Değişiklik Talebi Gönder", width=300, command=self.req_profile).pack(anchor="w", padx=20, pady=15)
+        
+        ctk.CTkLabel(self.scroll, text="📚 Ödünç Geçmişi", font=ctk.CTkFont(size=18, weight="bold")).pack(anchor="w", pady=(10, 10))
+        
+        history = BorrowController.get_member_borrows(self.main_app.user["id"])
+        if not history:
+            ctk.CTkLabel(self.scroll, text="📭 Henüz hiç kitap ödünç almadınız.", font=ctk.CTkFont(size=16), text_color=APPLE_TEXT_MUTED).pack(pady=50)
+            return
             
-        for br in borrows:
-            br_id, title, author, url, b_date, r_date, act_date, fee = br
+        for h in history:
+            br_id, title, author, url, b_date, r_date, act_date, fee = h
+            card = GlassFrame(self.scroll, height=120)
+            card.pack(fill="x", pady=10)
             
-            card = ctk.CTkFrame(self.scrollable_frame, height=120, corner_radius=10)
-            card.pack(fill="x", pady=10, padx=10)
+            l_frame = ctk.CTkFrame(card, fg_color="transparent")
+            l_frame.pack(side="left", padx=20, pady=20, fill="y")
+            ctk.CTkLabel(l_frame, text=f"📖 {title}", font=ctk.CTkFont(size=18, weight="bold")).pack(anchor="w")
+            ctk.CTkLabel(l_frame, text=f"👤 {author}", font=ctk.CTkFont(size=13), text_color=APPLE_TEXT_MUTED).pack(anchor="w", pady=(5,0))
             
-            info_frame = ctk.CTkFrame(card, fg_color="transparent")
-            info_frame.pack(side="left", padx=20, pady=20, fill="both", expand=True)
-            
-            ctk.CTkLabel(info_frame, text=title, font=ctk.CTkFont(size=18, weight="bold")).pack(anchor="w")
-            ctk.CTkLabel(info_frame, text=author, font=ctk.CTkFont(size=14), text_color="gray").pack(anchor="w")
-            
-            status_frame = ctk.CTkFrame(card, fg_color="transparent")
-            status_frame.pack(side="right", padx=20, pady=20)
-            
+            r_frame = ctk.CTkFrame(card, fg_color="transparent")
+            r_frame.pack(side="right", padx=20, pady=20)
             if act_date and act_date != "None":
-                status = f"İade Edildi ({act_date})"
-                color = "#10B981"
+                status = f"✅ İade Edildi ({act_date})"
+                ctk.CTkLabel(r_frame, text=status, font=ctk.CTkFont(size=14, weight="bold"), text_color=APPLE_GREEN).pack(anchor="e")
             else:
-                status = f"İade Bekleniyor (Son: {r_date})"
-                color = "#F59E0B"
-                
-            ctk.CTkLabel(status_frame, text=status, font=ctk.CTkFont(size=14, weight="bold"), text_color=color).pack(anchor="e")
-            
-            if fee and fee > 0:
-                ctk.CTkLabel(status_frame, text=f"Ceza: {fee} TL", font=ctk.CTkFont(size=14, weight="bold"), text_color="#EF4444").pack(anchor="e")
+                status = f"⏳ Bekleniyor (Son: {r_date})"
+                ctk.CTkLabel(r_frame, text=status, font=ctk.CTkFont(size=14, weight="bold"), text_color=APPLE_ORANGE).pack(anchor="e")
+                AnimatedButton(r_frame, text="İade Et", width=100, command=lambda bid=br_id: self.return_book(bid)).pack(anchor="e", pady=(5, 0))
 
+    def return_book(self, bid):
+        if messagebox.askyesno("İade", "Kitabı iade etmek istediğinize emin misiniz?"):
+            success, msg = BorrowController.return_book(bid)
+            if success: self.load_history()
+            else: messagebox.showerror("Hata", msg)
+            
+    def toggle_pw(self):
+        s = "" if self.chk_pw.get() == 1 else "●"
+        self.old_pw.configure(show=s)
+        self.new_pw1.configure(show=s)
+        self.new_pw2.configure(show=s)
+        
+    def req_profile(self):
+        nn = self.new_name.get()
+        ne = self.new_email.get()
+        if not nn or not ne:
+            messagebox.showerror("Hata", "Lütfen tüm alanları doldurun.")
+            return
+        from controllers.library import ProfileRequestController
+        succ, msg = ProfileRequestController.add_request(self.main_app.user["id"], self.main_app.user["name"], nn, ne)
+        if succ:
+            messagebox.showinfo("Başarılı", msg)
+            self.new_name.delete(0, "end")
+            self.new_email.delete(0, "end")
+        else:
+            messagebox.showerror("Hata", msg)
+            
+    def change_pw(self):
+        old = self.old_pw.get()
+        n1 = self.new_pw1.get()
+        n2 = self.new_pw2.get()
+        if not old or not n1 or not n2:
+            messagebox.showerror("Hata", "Tüm alanları doldurun.")
+            return
+        if n1 != n2:
+            messagebox.showerror("Hata", "Yeni şifreler uyuşmuyor.")
+            return
+        succ, msg = AuthController.change_password(self.main_app.user["id"], old, n1)
+        if succ:
+            messagebox.showinfo("Başarılı", msg)
+            self.old_pw.delete(0, "end")
+            self.new_pw1.delete(0, "end")
+            self.new_pw2.delete(0, "end")
+        else:
+            messagebox.showerror("Hata", msg)
+
+class NotificationsView(ctk.CTkFrame):
+    def __init__(self, master, main_app):
+        super().__init__(master, fg_color="transparent")
+        self.main_app = main_app
+        ctk.CTkLabel(self, text="🔔 Bildirimler", font=ctk.CTkFont(size=28, weight="bold")).pack(anchor="w", padx=40, pady=(40, 20))
+        
+        self.scroll = ctk.CTkScrollableFrame(self, fg_color="transparent")
+        self.scroll.pack(fill="both", expand=True, padx=40)
+        
+        notifs = NotificationController.get_unread_notifications(self.main_app.user["id"])
+        if not notifs:
+            ctk.CTkLabel(self.scroll, text="Şu an okunmamış bir bildiriminiz yok.", text_color=APPLE_TEXT_MUTED).pack(pady=20)
+        else:
+            for n_id, msg, date in notifs:
+                f = GlassFrame(self.scroll, height=80)
+                f.pack(fill="x", pady=5)
+                f.pack_propagate(False)
+                ctk.CTkLabel(f, text=msg, font=ctk.CTkFont(size=14, weight="bold"), wraplength=700, justify="left").pack(anchor="w", padx=20, pady=(15, 0))
+                ctk.CTkLabel(f, text=date, font=ctk.CTkFont(size=12), text_color=APPLE_TEXT_MUTED).pack(anchor="w", padx=20)
+                NotificationController.mark_as_read(n_id)
+        
+        # Once viewed, update sidebar count to 0
+        self.main_app.render_sidebar()
+
+class UserRequestView(ctk.CTkFrame):
+    def __init__(self, master, main_app):
+        super().__init__(master, fg_color="transparent")
+        self.main_app = main_app
+        
+        ctk.CTkLabel(self, text="🌟 Kitap İste", font=ctk.CTkFont(size=28, weight="bold")).pack(anchor="w", padx=40, pady=(40, 10))
+        ctk.CTkLabel(self, text="Kütüphanede bulamadığınız kitapları internetten arayıp yöneticiden talep edebilirsiniz.", text_color=APPLE_TEXT_MUTED).pack(anchor="w", padx=40, pady=(0, 20))
+        
+        self.top = GlassFrame(self, height=80)
+        self.top.pack(fill="x", padx=40, pady=(0, 20))
+        self.top.pack_propagate(False)
+        
+        self.ent = ctk.CTkEntry(self.top, placeholder_text="🔍 Kitap Adı, Yazar (OpenLibrary)...", width=400, height=36, corner_radius=18)
+        self.ent.pack(side="left", padx=20, pady=20)
+        AnimatedButton(self.top, text="Ara", width=80, command=self.search).pack(side="left")
+        self.status = ctk.CTkLabel(self.top, text="", text_color=APPLE_TEXT_MUTED)
+        self.status.pack(side="left", padx=20)
+        
+        self.scroll = ctk.CTkScrollableFrame(self, fg_color="transparent")
+        self.scroll.pack(fill="both", expand=True, padx=40)
+        
+        # Default Recommendations
+        self.show_recommendations()
+
+    def show_recommendations(self):
+        for w in self.scroll.winfo_children(): w.destroy()
+        ctk.CTkLabel(self.scroll, text="💡 Popüler İstek Önerileri", font=ctk.CTkFont(size=18, weight="bold")).pack(anchor="w", pady=10)
+        recs = [
+            ("Harry Potter and the Sorcerer's Stone", "J.K. Rowling", "9780590353427", "https://covers.openlibrary.org/b/isbn/9780590353427-M.jpg"),
+            ("1984", "George Orwell", "9780451524935", "https://covers.openlibrary.org/b/isbn/9780451524935-M.jpg"),
+            ("The Great Gatsby", "F. Scott Fitzgerald", "9780743273565", "https://covers.openlibrary.org/b/isbn/9780743273565-M.jpg")
+        ]
+        for title, author, isbn, cover in recs:
+            self.build_result_card(title, author, isbn, cover)
+
+    def search(self):
+        q = self.ent.get()
+        if not q: return
+        self.status.configure(text="Aranıyor...")
+        self.update()
+        for w in self.scroll.winfo_children(): w.destroy()
+        
+        def _do_search():
+            try:
+                r = requests.get(f"https://openlibrary.org/search.json?q={q}&limit=5", timeout=10)
+                docs = r.json().get("docs", [])
+                self.after(0, self._show_results, docs)
+            except Exception as e:
+                self.after(0, lambda: self.status.configure(text="❌ Hata."))
+                
+        threading.Thread(target=_do_search, daemon=True).start()
+
+    def _show_results(self, docs):
+        self.status.configure(text=f"✅ {len(docs)} sonuç.")
+        for d in docs:
+            t = d.get("title", "Bilinmiyor")
+            a = d.get("author_name", ["Bilinmiyor"])[0]
+            isbn = d.get("isbn", ["000000"])[0]
+            cov = f"https://covers.openlibrary.org/b/isbn/{isbn}-M.jpg"
+            self.build_result_card(t, a, isbn, cov)
+
+    def build_result_card(self, t, a, i, c_url):
+        c = GlassFrame(self.scroll, height=100)
+        c.pack(fill="x", pady=10)
+        c.pack_propagate(False)
+        
+        f_left = ctk.CTkFrame(c, fg_color="transparent")
+        f_left.pack(side="left", padx=20, pady=10)
+        ctk.CTkLabel(f_left, text=f"📖 {t[:50]}", font=ctk.CTkFont(size=16, weight="bold")).pack(anchor="w")
+        ctk.CTkLabel(f_left, text=f"👤 {a} | ISBN: {i}", text_color=APPLE_TEXT_MUTED).pack(anchor="w")
+        
+        AnimatedButton(c, text="Kütüphaneden İste", width=140, fg_color=APPLE_ORANGE, hover_color="#cc7a00", command=lambda: self.request_book(t, a, i, c_url)).pack(side="right", padx=20)
+
+    def request_book(self, t, a, i, c_url):
+        if messagebox.askyesno("İstek", f"{t} kitabını yöneticiden talep etmek istiyor musunuz?"):
+            uid = self.main_app.user["id"]
+            uname = self.main_app.user["name"]
+            success, msg = RequestController.add_request(uid, uname, t, a, i, c_url)
+            if success: messagebox.showinfo("Başarılı", "İsteğiniz yöneticiye iletildi!")
+            else: messagebox.showerror("Hata", msg)
+
+
+class SettingsView(ctk.CTkFrame):
+    def __init__(self, master, main_app):
+        super().__init__(master, fg_color="transparent")
+        self.main_app = main_app
+        ctk.CTkLabel(self, text="Ayarlar", font=ctk.CTkFont(size=28, weight="bold")).pack(anchor="w", padx=40, pady=(40, 20))
+        
+        f = GlassFrame(self, height=200)
+        f.pack(fill="x", padx=40, pady=20)
+        f.pack_propagate(False)
+        
+        ctk.CTkLabel(f, text="Görünüm Modu", font=ctk.CTkFont(size=18, weight="bold")).pack(anchor="w", padx=20, pady=(20, 10))
+        self.mode_var = ctk.StringVar(value=ctk.get_appearance_mode())
+        
+        ctk.CTkRadioButton(f, text="Karanlık Mod (Dark)", variable=self.mode_var, value="Dark", command=self.change_mode).pack(anchor="w", padx=20, pady=10)
+        ctk.CTkRadioButton(f, text="Aydınlık Mod (Light)", variable=self.mode_var, value="Light", command=self.change_mode).pack(anchor="w", padx=20, pady=10)
+        
+    def change_mode(self):
+        ctk.set_appearance_mode(self.mode_var.get())
+        apply_treeview_style()
 
 class UserMainWindow(ctk.CTk):
     def __init__(self):
         super().__init__()
-        self.title("Lumina Kütüphane Sistemi")
-        self.geometry("1280x800")
+        self.title("Lumina Kütüphane - macOS Style")
+        self.geometry("1100x750")
+        ctk.set_appearance_mode("dark")
+        self.configure(fg_color=APPLE_BG)
         
-        # Varsayılan değerler
-        ctk.set_appearance_mode("Dark")
-        ctk.set_default_color_theme("blue")
+        self.user = None
+        self.current_view = None
         
-        self.current_user = None
-        self.current_frame = None
+        self.sidebar = GlassFrame(self, corner_radius=0)
+        self.sidebar.pack(side="left", fill="y")
+        self.sidebar.configure(width=220)
+        self.sidebar.pack_propagate(False)
         
-        # Tema seçimiyle başlat
-        self.show_theme_selection()
+        self.content = ctk.CTkFrame(self, fg_color="transparent")
+        self.content.pack(side="left", fill="both", expand=True)
+        
+        self.render_sidebar()
+        self.show_catalog()
 
-    def show_theme_selection(self):
-        if self.current_frame: self.current_frame.destroy()
-        self.current_frame = ThemeSelectionView(self, self.show_main_app)
-
-    def show_login(self):
-        if hasattr(self, 'main_container') and self.main_container.winfo_exists():
-            self.main_container.destroy()
-        if self.current_frame: self.current_frame.destroy()
-        self.current_frame = MemberLoginView(self, self.on_login_success, self.show_register, self.show_main_app)
-
-    def show_register(self):
-        if self.current_frame: self.current_frame.destroy()
-        self.current_frame = MemberRegisterView(self, self.show_login, self.show_login)
-
-    def on_login_success(self, user_data):
-        self.current_user = user_data
-        self.show_main_app()
-
-    def show_main_app(self):
-        if self.current_frame: self.current_frame.destroy()
-        
-        self.main_container = ctk.CTkFrame(self)
-        self.main_container.pack(fill="both", expand=True)
-        
-        self.sidebar_frame = ctk.CTkFrame(self.main_container, width=250, corner_radius=0)
-        self.sidebar_frame.pack(side="left", fill="y")
-        self.sidebar_frame.pack_propagate(False)
-        
-        self.logo_label = ctk.CTkLabel(self.sidebar_frame, text="LUMINA", font=ctk.CTkFont(size=32, weight="bold", slant="italic"))
-        self.logo_label.pack(pady=(40, 50))
-        
-        # Menü Butonları
-        self.btn_catalog = ctk.CTkButton(self.sidebar_frame, text="📚 Kitap Kataloğu", height=50, corner_radius=10, 
-                                         fg_color="transparent", anchor="w", font=ctk.CTkFont(size=15),
-                                         command=lambda: self.switch_view(CatalogView, self.get_current_user, self.show_login))
-        self.btn_catalog.pack(fill="x", padx=20, pady=10)
-        
-        if self.current_user:
-            self.btn_profile = ctk.CTkButton(self.sidebar_frame, text="👤 Profilim", height=50, corner_radius=10, 
-                                             fg_color="transparent", anchor="w", font=ctk.CTkFont(size=15),
-                                             command=lambda: self.switch_view(ProfileView, self.current_user))
-            self.btn_profile.pack(fill="x", padx=20, pady=10)
-            
-            self.btn_auth = ctk.CTkButton(self.sidebar_frame, text="🚪 Çıkış Yap", height=50, corner_radius=10, 
-                                            fg_color="transparent", text_color="#EF4444", anchor="w", font=ctk.CTkFont(size=15),
-                                            command=self.logout)
-            self.btn_auth.pack(fill="x", padx=20, pady=10)
+    def on_login_success(self, user):
+        if user.get("must_change_password") == 1:
+            ForcePasswordModal(self, user, self.finalize_login)
         else:
-            self.btn_auth = ctk.CTkButton(self.sidebar_frame, text="🔐 Giriş Yap / Kayıt Ol", height=50, corner_radius=10, 
-                                            fg_color="transparent", anchor="w", font=ctk.CTkFont(size=15),
-                                            command=self.show_login)
-            self.btn_auth.pack(fill="x", padx=20, pady=10)
+            self.finalize_login(user)
             
-            self.guest_lbl = ctk.CTkLabel(self.sidebar_frame, text="(Misafir Girişi)", text_color="gray", font=ctk.CTkFont(size=12))
-            self.guest_lbl.pack(pady=0)
+    def finalize_login(self, user):
+        self.user = user
+        self.render_sidebar()
+        self.show_catalog()
+        
+    def logout(self):
+        self.user = None
+        self.render_sidebar()
+        self.show_catalog()
+
+    def render_sidebar(self):
+        for w in self.sidebar.winfo_children(): w.destroy()
+        
+        ic_cat = get_icon("book")
+        ic_req = get_icon("star")
+        ic_prof = get_icon("user")
+        ic_set = get_icon("settings")
+        ic_out = get_single_icon("logout.png")
+        
+        if self.user:
+            self.prof = ctk.CTkFrame(self.sidebar, fg_color="transparent")
+            self.prof.pack(fill="x", pady=(40, 20), padx=20)
+            ctk.CTkLabel(self.prof, text="", image=get_icon("user", 36)).pack()
+            ctk.CTkLabel(self.prof, text=self.user["name"], font=ctk.CTkFont(size=16, weight="bold")).pack(pady=(5,0))
+            ctk.CTkLabel(self.prof, text="Onaylı Üye", font=ctk.CTkFont(size=11), text_color=APPLE_GREEN).pack()
             
-        # Arayüz içi Tema Değiştirici
-        self.theme_frame = ctk.CTkFrame(self.sidebar_frame, fg_color="transparent")
-        self.theme_frame.pack(side="bottom", fill="x", padx=20, pady=40)
-        
-        self.theme_lbl = ctk.CTkLabel(self.theme_frame, text="Tema Ayarı", font=ctk.CTkFont(size=12, weight="bold"), text_color="gray")
-        self.theme_lbl.pack(anchor="w", pady=(0, 5))
-        
-        self.mode_switch = ctk.CTkSegmentedButton(self.theme_frame, values=["Dark", "Light"], command=self.change_mode)
-        self.mode_switch.set(ctk.get_appearance_mode())
-        self.mode_switch.pack(fill="x")
-
-    def change_mode(self, value):
-        ctk.set_appearance_mode(value)
-
-    def get_current_user(self):
-        return self.current_user
-
-    def switch_view(self, view_class, *args):
-        if hasattr(self, 'content_frame') and self.content_frame.winfo_exists():
-            pass
+            notifs = NotificationController.get_unread_notifications(self.user["id"])
+            n_count = len(notifs)
+            ic_bell = get_icon("bell_active" if n_count>0 else "bell")
+            
+            ctk.CTkButton(self.sidebar, text=" Katalog", image=ic_cat, font=ctk.CTkFont(size=14), fg_color="transparent", text_color=APPLE_TEXT, hover_color=("#E5E5EA", "#3A3A3C"), anchor="w", command=self.show_catalog).pack(fill="x", padx=15, pady=5)
+            ctk.CTkButton(self.sidebar, text=" Kitap İste", image=ic_req, font=ctk.CTkFont(size=14), fg_color="transparent", text_color=APPLE_TEXT, hover_color=("#E5E5EA", "#3A3A3C"), anchor="w", command=self.show_request).pack(fill="x", padx=15, pady=5)
+            ctk.CTkButton(self.sidebar, text=f" Bildirimler ({n_count})", image=ic_bell, font=ctk.CTkFont(size=14), fg_color="transparent", text_color=APPLE_ORANGE if n_count>0 else APPLE_TEXT, hover_color=("#E5E5EA", "#3A3A3C"), anchor="w", command=self.show_notifications).pack(fill="x", padx=15, pady=5)
+            ctk.CTkButton(self.sidebar, text=" Profilim", image=ic_prof, font=ctk.CTkFont(size=14), fg_color="transparent", text_color=APPLE_TEXT, hover_color=("#E5E5EA", "#3A3A3C"), anchor="w", command=self.show_profile).pack(fill="x", padx=15, pady=5)
+            ctk.CTkButton(self.sidebar, text=" Ayarlar", image=ic_set, font=ctk.CTkFont(size=14), fg_color="transparent", text_color=APPLE_TEXT, hover_color=("#E5E5EA", "#3A3A3C"), anchor="w", command=self.show_settings).pack(fill="x", padx=15, pady=5)
+            
+            ctk.CTkButton(self.sidebar, text=" Çıkış", image=ic_out, font=ctk.CTkFont(size=14), fg_color="transparent", text_color=APPLE_RED, hover_color=("#E5E5EA", "#3A3A3C"), anchor="w", command=self.logout).pack(side="bottom", fill="x", padx=15, pady=30)
         else:
-            self.content_frame = ctk.CTkFrame(self.main_container, corner_radius=0)
-            self.content_frame.pack(side="left", fill="both", expand=True)
-
-        if hasattr(self, 'current_view') and self.current_view:
-            self.current_view.destroy()
+            self.prof = ctk.CTkFrame(self.sidebar, fg_color="transparent")
+            self.prof.pack(fill="x", pady=(40, 20), padx=20)
+            ctk.CTkLabel(self.prof, text="", image=get_icon("user", 36)).pack()
+            ctk.CTkLabel(self.prof, text="Ziyaretçi", font=ctk.CTkFont(size=16, weight="bold")).pack(pady=(5,0))
             
-        self.current_view = view_class(self.content_frame, *args)
+            ctk.CTkButton(self.sidebar, text=" Katalog", image=ic_cat, font=ctk.CTkFont(size=14), fg_color="transparent", text_color=APPLE_TEXT, hover_color=("#E5E5EA", "#3A3A3C"), anchor="w", command=self.show_catalog).pack(fill="x", padx=15, pady=5)
+            ctk.CTkButton(self.sidebar, text=" Ayarlar", image=ic_set, font=ctk.CTkFont(size=14), fg_color="transparent", text_color=APPLE_TEXT, hover_color=("#E5E5EA", "#3A3A3C"), anchor="w", command=self.show_settings).pack(fill="x", padx=15, pady=5)
+            ctk.CTkButton(self.sidebar, text=" Giriş Yap", image=ic_prof, font=ctk.CTkFont(size=14), fg_color="transparent", text_color=APPLE_BLUE, hover_color=("#E5E5EA", "#3A3A3C"), anchor="w", command=lambda: AuthModal(self, self.on_login_success)).pack(side="bottom", fill="x", padx=15, pady=30)
+
+    def show_catalog(self):
+        if self.current_view: self.current_view.destroy()
+        self.current_view = CatalogView(self.content, self)
         self.current_view.pack(fill="both", expand=True)
 
-    def logout(self):
-        self.current_user = None
-        self.show_main_app()
+    def show_profile(self):
+        if self.current_view: self.current_view.destroy()
+        self.current_view = ProfileView(self.content, self)
+        self.current_view.pack(fill="both", expand=True)
+
+    def show_request(self):
+        if self.current_view: self.current_view.destroy()
+        self.current_view = UserRequestView(self.content, self)
+        self.current_view.pack(fill="both", expand=True)
+
+    def show_notifications(self):
+        if self.current_view: self.current_view.destroy()
+        self.current_view = NotificationsView(self.content, self)
+        self.current_view.pack(fill="both", expand=True)
+
+    def show_settings(self):
+        if self.current_view: self.current_view.destroy()
+        self.current_view = SettingsView(self.content, self)
+        self.current_view.pack(fill="both", expand=True)
+
+class ForcePasswordModal(ctk.CTkToplevel):
+    def __init__(self, master, user, on_complete):
+        super().__init__(master)
+        self.title("🛡️ Şifre Güvenliği")
+        self.geometry("450x450")
+        self.configure(fg_color=APPLE_BG)
+        self.user = user
+        self.on_complete = on_complete
+        self.grab_set()
+        
+        # Disable close button (X) -> must change password
+        self.protocol("WM_DELETE_WINDOW", self.disable_close)
+        
+        ctk.CTkLabel(self, text="Güvenlik Uyarısı", font=ctk.CTkFont(size=24, weight="bold"), text_color=APPLE_ORANGE).pack(pady=(30,10))
+        ctk.CTkLabel(self, text="Yönetici tarafından oluşturulan bu hesapla\nilk defa giriş yaptınız. Lütfen güvenliğiniz için\nkendi şifrenizi belirleyin.", text_color=APPLE_TEXT_MUTED, justify="center").pack(pady=(0, 20))
+        
+        self.old_pw = ctk.CTkEntry(self, placeholder_text="Yöneticinin Verdiği Şifre (Mevcut)", show="●", width=300, height=36)
+        self.old_pw.pack(pady=5)
+        self.new_pw1 = ctk.CTkEntry(self, placeholder_text="Yeni Şifre (En az 7 karakter)", show="●", width=300, height=36)
+        self.new_pw1.pack(pady=5)
+        self.new_pw2 = ctk.CTkEntry(self, placeholder_text="Yeni Şifre Tekrar", show="●", width=300, height=36)
+        self.new_pw2.pack(pady=5)
+        
+        self.chk = ctk.CTkCheckBox(self, text="Şifreleri Göster", command=self.toggle)
+        self.chk.pack(pady=5)
+        
+        AnimatedButton(self, text="Şifreyi Belirle ve Giriş Yap", width=300, command=self.save).pack(pady=20)
+        
+    def disable_close(self):
+        pass
+        
+    def toggle(self):
+        s = "" if self.chk.get() == 1 else "●"
+        self.old_pw.configure(show=s)
+        self.new_pw1.configure(show=s)
+        self.new_pw2.configure(show=s)
+        
+    def save(self):
+        old = self.old_pw.get()
+        n1 = self.new_pw1.get()
+        n2 = self.new_pw2.get()
+        
+        if not old or not n1 or not n2:
+            messagebox.showerror("Hata", "Tüm alanları doldurun.")
+            return
+        if n1 != n2:
+            messagebox.showerror("Hata", "Yeni şifreler eşleşmiyor.")
+            return
+            
+        succ, msg = AuthController.change_password(self.user["id"], old, n1)
+        if succ:
+            messagebox.showinfo("Başarılı", "Şifreniz başarıyla güncellendi! Hoş geldiniz.")
+            self.user["must_change_password"] = 0
+            self.destroy()
+            self.on_complete(self.user)
+        else:
+            messagebox.showerror("Hata", msg)

@@ -16,7 +16,9 @@ def init_db():
     CREATE TABLE IF NOT EXISTS admins (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         username TEXT UNIQUE NOT NULL,
-        password_hash TEXT NOT NULL
+        password_hash TEXT NOT NULL,
+        name TEXT DEFAULT 'Yönetici',
+        email TEXT DEFAULT 'admin@lumina.com'
     )
     ''')
     
@@ -44,22 +46,64 @@ def init_db():
         email TEXT UNIQUE NOT NULL,
         phone TEXT,
         password_hash TEXT NOT NULL,
-        registered_date DATE DEFAULT CURRENT_DATE
+        is_approved BOOLEAN DEFAULT 0,
+        must_change_password BOOLEAN DEFAULT 0,
+        registered_date DATE DEFAULT CURRENT_TIMESTAMP
     )
     ''')
     
-    # 4. ÖDÜNÇ ALMA TABLOSU (Foreign Keys ile İlişkisel)
+    # 4. ÖDÜNÇ ALMA TABLOSU
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS borrows (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         book_id INTEGER NOT NULL,
-        member_id INTEGER NOT NULL,
+        member_id INTEGER,
+        member_name_snapshot TEXT NOT NULL,
         borrow_date DATE DEFAULT CURRENT_DATE,
         return_date DATE NOT NULL,
         actual_return_date DATE,
         late_fee REAL DEFAULT 0,
         FOREIGN KEY (book_id) REFERENCES books (id) ON DELETE CASCADE,
-        FOREIGN KEY (member_id) REFERENCES members (id) ON DELETE CASCADE
+        FOREIGN KEY (member_id) REFERENCES members (id) ON DELETE SET NULL
+    )
+    ''')
+    
+    # 5. İSTEK KİTAP TABLOSU
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS book_requests (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        member_id INTEGER,
+        member_name TEXT,
+        title TEXT NOT NULL,
+        author TEXT,
+        isbn TEXT,
+        cover_url TEXT,
+        request_date DATE DEFAULT CURRENT_TIMESTAMP
+    )
+    ''')
+
+    # BİLDİRİMLER TABLOSU
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS notifications (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        member_id INTEGER,
+        message TEXT NOT NULL,
+        is_read BOOLEAN DEFAULT 0,
+        created_at DATE DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (member_id) REFERENCES members(id)
+    )
+    ''')
+
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS profile_requests (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        member_id INTEGER,
+        member_name TEXT,
+        new_name TEXT,
+        new_email TEXT,
+        status TEXT DEFAULT 'PENDING',
+        request_date DATE DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (member_id) REFERENCES members(id)
     )
     ''')
     
@@ -77,7 +121,33 @@ def init_db():
     )
     ''')
 
-    # 6. AUDIT LOGS TABLOSU (İşlem Takibi)
+    # 6. FAVORİLER (WISHLIST) TABLOSU
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS wishlist (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        book_id INTEGER NOT NULL,
+        member_id INTEGER NOT NULL,
+        added_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (book_id) REFERENCES books (id) ON DELETE CASCADE,
+        FOREIGN KEY (member_id) REFERENCES members (id) ON DELETE CASCADE,
+        UNIQUE(book_id, member_id)
+    )
+    ''')
+
+    # 7. REZERVASYON TABLOSU
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS reservations (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        book_id INTEGER NOT NULL,
+        member_id INTEGER NOT NULL,
+        reservation_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+        status TEXT DEFAULT 'Bekliyor',
+        FOREIGN KEY (book_id) REFERENCES books (id) ON DELETE CASCADE,
+        FOREIGN KEY (member_id) REFERENCES members (id) ON DELETE CASCADE
+    )
+    ''')
+
+    # 8. AUDIT LOGS TABLOSU (İşlem Takibi)
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS audit_logs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -126,7 +196,7 @@ def init_db():
     if cursor.fetchone()[0] == 0:
         salt = bcrypt.gensalt()
         hashed = bcrypt.hashpw(b"admin123", salt).decode('utf-8')
-        cursor.execute("INSERT INTO admins (username, password_hash) VALUES (?, ?)", ("admin", hashed))
+        cursor.execute("INSERT INTO admins (username, password_hash, name, email) VALUES (?, ?, ?, ?)", ("admin", hashed, "Sistem Yöneticisi", "admin@lumina.com"))
         
     conn.commit()
     conn.close()
