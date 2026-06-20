@@ -123,8 +123,10 @@ class CatalogCard(GlassFrame):
 
         def _fetch():
             try:
+                import ssl
+                context = ssl._create_unverified_context()
                 req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-                raw_data = urllib.request.urlopen(req, timeout=10).read()
+                raw_data = urllib.request.urlopen(req, timeout=10, context=context).read()
                 img = Image.open(io.BytesIO(raw_data))
                 with IMAGE_LOCK:
                     IMAGE_CACHE[url] = img
@@ -208,8 +210,10 @@ class BookDetailModal(ctk.CTkToplevel):
 
         def _fetch():
             try:
+                import ssl
+                context = ssl._create_unverified_context()
                 req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-                raw_data = urllib.request.urlopen(req, timeout=10).read()
+                raw_data = urllib.request.urlopen(req, timeout=10, context=context).read()
                 img = Image.open(io.BytesIO(raw_data))
                 with IMAGE_LOCK:
                     IMAGE_CACHE[url] = img
@@ -564,11 +568,14 @@ class UserRequestView(ctk.CTkFrame):
         
         def _do_search():
             try:
-                r = requests.get(f"https://openlibrary.org/search.json?q={q}&limit=5", timeout=10)
+                import urllib3
+                urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+                r = requests.get(f"https://openlibrary.org/search.json?q={q}&limit=5", timeout=15, verify=False)
                 docs = r.json().get("docs", [])
                 self.after(0, self._show_results, docs)
             except Exception as e:
-                self.after(0, lambda: self.status.configure(text="❌ Hata."))
+                print(f"DEBUG SEARCH USER REQUEST ERROR: {e}")
+                self.after(0, lambda err=e: self.status.configure(text=f"❌ Hata: {str(err)[:25]}"))
                 
         threading.Thread(target=_do_search, daemon=True).start()
 

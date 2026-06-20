@@ -32,18 +32,31 @@ def test_member_registration_and_login():
     assert user["name"] == "Ali Yılmaz"
 
 def test_add_book():
-    assert BookController.add_book("1984", "George Orwell", "12345", "Roman", 1949, "", "", 3)[0] == True
-    assert len(BookController.get_all_books()) == 1
+    initial_count = len(BookController.get_all_books("", limit=200))
+    # Benzersiz bir kitap ekliyoruz (ISBN BookController tarafından otomatik ezilir ve benzersiz oluşturulur)
+    assert BookController.add_book("Test Kitap Adı", "Test Yazar Adı", "", "Roman", 2024, "", "", 3)[0] == True
+    assert len(BookController.get_all_books("", limit=200)) == initial_count + 1
 
 def test_borrow_and_return():
-    b_id = BookController.get_all_books()[0][0]
-    m_id = MemberController.get_all_members()[0][0]
+    books = BookController.get_all_books("", limit=10)
+    assert len(books) > 0
+    b_id = books[0][0]
+    initial_avail = books[0][9]
+    
+    members = MemberController.get_all_members()
+    assert len(members) > 0
+    m_id = members[0][0]
     
     # Ödünç Ver
     assert BorrowController.borrow_book(b_id, m_id)[0] == True
-    assert BookController.get_all_books()[0][9] == 2 # Mevcut stok 1 azaldı
+    
+    # Stok kontrolü
+    books_after = BookController.get_all_books("", limit=10)
+    assert books_after[0][9] == initial_avail - 1
     
     # İade Al
     br_id = BorrowController.get_all_borrows()[0][0]
     assert BorrowController.return_book(br_id)[0] == True
-    assert BookController.get_all_books()[0][9] == 3 # Mevcut stok geri geldi
+    
+    books_final = BookController.get_all_books("", limit=10)
+    assert books_final[0][9] == initial_avail

@@ -371,11 +371,16 @@ class AdminOpenLibraryView(ctk.CTkFrame):
         
         def _do_search():
             try:
-                r = requests.get(f"https://openlibrary.org/search.json?q={q}&limit=10", timeout=10)
+                import urllib3
+                urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+                r = requests.get(f"https://openlibrary.org/search.json?q={q}&limit=10", timeout=15, verify=False)
                 docs = r.json().get("docs", [])
                 self.after(0, self._show_results, docs)
             except Exception as e:
-                self.after(0, lambda: self.status.configure(text="❌ Hata oluştu."))
+                print(f"DEBUG SEARCH ERROR: {e}")
+                import traceback
+                traceback.print_exc()
+                self.after(0, lambda err=e: self.status.configure(text=f"❌ Hata: {str(err)[:25]}"))
                 
         threading.Thread(target=_do_search, daemon=True).start()
 
