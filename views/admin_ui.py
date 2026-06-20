@@ -764,7 +764,7 @@ class AdminSettingsView(ctk.CTkFrame):
 class AdminWindow(ctk.CTk):
     def __init__(self):
         super().__init__()
-        self.title("Lumina - Admin Dashboard")
+        self.title("LibSys - Admin Dashboard")
         self.geometry("1300x850")
         ctk.set_appearance_mode("dark")
         self.configure(fg_color=APPLE_BG)

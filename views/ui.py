@@ -9,9 +9,11 @@ import threading
 import requests
 import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+from concurrent.futures import ThreadPoolExecutor
 
 IMAGE_CACHE = {}
 IMAGE_LOCK = threading.Lock()
+IMAGE_EXECUTOR = ThreadPoolExecutor(max_workers=4)
 
 # macOS Colors (Light, Dark)
 APPLE_BG = ("#F2F2F7", "#1E1E1E")
@@ -134,7 +136,7 @@ class CatalogCard(GlassFrame):
                     self.cover_lbl.after(0, lambda: self.cover_lbl.configure(image=ctk_img, text=""))
             except Exception as e:
                 pass
-        threading.Thread(target=_fetch, daemon=True).start()
+        IMAGE_EXECUTOR.submit(_fetch)
 
 class BookDetailModal(ctk.CTkToplevel):
     def __init__(self, master, book, on_borrow):
@@ -219,7 +221,7 @@ class BookDetailModal(ctk.CTkToplevel):
                     self.cover_lbl.after(0, lambda: self.cover_lbl.configure(image=ctk_img, text=""))
             except Exception as e:
                 pass
-        threading.Thread(target=_fetch, daemon=True).start()
+        IMAGE_EXECUTOR.submit(_fetch)
 
 class AuthModal(ctk.CTkToplevel):
     def __init__(self, master, on_success):
@@ -320,6 +322,8 @@ class CatalogView(ctk.CTkFrame):
         self.books = []
         self.cards = []
         self.is_loading = False
+        self.current_cols = 0
+        self._resize_timer = None
         
         self.top_bar = ctk.CTkFrame(self, fg_color="transparent", height=80)
         self.top_bar.pack(fill="x", padx=40, pady=(40, 10))
@@ -344,6 +348,7 @@ class CatalogView(ctk.CTkFrame):
         for c in self.cards: c.destroy()
         self.cards.clear()
         self.books.clear()
+        self.current_cols = 0
         self.load_books()
 
     def load_books(self):
@@ -364,16 +369,22 @@ class CatalogView(ctk.CTkFrame):
         for b in new_books:
             card = CatalogCard(self.scroll, b, self.on_borrow)
             self.cards.append(card)
-        self.rearrange_grid()
+        self.rearrange_grid(force=True)
         self.is_loading = False
         
     def on_resize(self, event):
-        self.rearrange_grid()
+        if self._resize_timer is not None:
+            self.after_cancel(self._resize_timer)
+        self._resize_timer = self.after(100, lambda: self.rearrange_grid())
         
-    def rearrange_grid(self):
+    def rearrange_grid(self, force=False):
+        self._resize_timer = None
         w = self.scroll.winfo_width()
         if w <= 1: return
         cols = max(1, w // 280)
+        if not force and cols == self.current_cols:
+            return
+        self.current_cols = cols
         for i, card in enumerate(self.cards):
             card.grid_forget()
             card.grid(row=i // cols, column=i % cols, padx=10, pady=15)
@@ -675,7 +686,7 @@ class SettingsView(ctk.CTkFrame):
 class UserMainWindow(ctk.CTk):
     def __init__(self):
         super().__init__()
-        self.title("Lumina Kütüphane - macOS Style")
+        self.title("LibSys")
         self.geometry("1100x750")
         ctk.set_appearance_mode("dark")
         self.configure(fg_color=APPLE_BG)
