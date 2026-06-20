@@ -8,6 +8,9 @@ import io
 import threading
 import requests
 
+IMAGE_CACHE = {}
+IMAGE_LOCK = threading.Lock()
+
 # macOS Colors (Light, Dark)
 APPLE_BG = ("#F2F2F7", "#1E1E1E")
 APPLE_PANEL = ("#FFFFFF", "#2C2C2E")
@@ -109,14 +112,26 @@ class CatalogCard(GlassFrame):
         self.detail_btn.pack(side="right", padx=(0, 5))
 
     def load_image(self, url):
+        with IMAGE_LOCK:
+            if url in IMAGE_CACHE:
+                try:
+                    ctk_img = ctk.CTkImage(IMAGE_CACHE[url], size=(120, 160))
+                    self.cover_lbl.configure(image=ctk_img, text="")
+                    return
+                except:
+                    pass
+
         def _fetch():
             try:
                 req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-                raw_data = urllib.request.urlopen(req, timeout=5).read()
+                raw_data = urllib.request.urlopen(req, timeout=10).read()
                 img = Image.open(io.BytesIO(raw_data))
+                with IMAGE_LOCK:
+                    IMAGE_CACHE[url] = img
                 ctk_img = ctk.CTkImage(img, size=(120, 160))
                 self.cover_lbl.after(0, lambda: self.cover_lbl.configure(image=ctk_img, text=""))
-            except: pass
+            except Exception as e:
+                pass
         threading.Thread(target=_fetch, daemon=True).start()
 
 class BookDetailModal(ctk.CTkToplevel):
@@ -182,14 +197,26 @@ class BookDetailModal(ctk.CTkToplevel):
         on_borrow(b_id)
 
     def load_image(self, url):
+        with IMAGE_LOCK:
+            if url in IMAGE_CACHE:
+                try:
+                    ctk_img = ctk.CTkImage(IMAGE_CACHE[url], size=(160, 240))
+                    self.cover_lbl.configure(image=ctk_img, text="")
+                    return
+                except:
+                    pass
+
         def _fetch():
             try:
                 req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-                raw_data = urllib.request.urlopen(req, timeout=5).read()
+                raw_data = urllib.request.urlopen(req, timeout=10).read()
                 img = Image.open(io.BytesIO(raw_data))
+                with IMAGE_LOCK:
+                    IMAGE_CACHE[url] = img
                 ctk_img = ctk.CTkImage(img, size=(160, 240))
                 self.cover_lbl.after(0, lambda: self.cover_lbl.configure(image=ctk_img, text=""))
-            except: pass
+            except Exception as e:
+                pass
         threading.Thread(target=_fetch, daemon=True).start()
 
 class AuthModal(ctk.CTkToplevel):

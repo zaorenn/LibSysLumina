@@ -47,7 +47,10 @@ python admin_app.py
 ```bash
 python main.py
 ```
-*(Uygulama üzerinden yeni bir hesap oluşturabilir ve sisteme giriş yapabilirsiniz.)*
+> **Varsayılan Üye Bilgileri:**
+> E-posta: `uye@lumina.com`
+> Şifre: `uye123`
+*(Uygulama üzerinden yeni bir hesap oluşturabilir veya bu varsayılan üye bilgileri ile doğrudan giriş yapabilirsiniz.)*
 
 ---
 
