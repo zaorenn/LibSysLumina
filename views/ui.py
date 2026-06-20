@@ -305,7 +305,7 @@ class CatalogView(ctk.CTkFrame):
         super().__init__(master, fg_color="transparent")
         self.main_app = main_app
         self.offset = 0
-        self.limit = 20
+        self.limit = 150
         self.query = ""
         self.books = []
         self.cards = []
@@ -568,24 +568,44 @@ class UserRequestView(ctk.CTkFrame):
         
         def _do_search():
             try:
-                import urllib3
-                urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-                r = requests.get(f"http://openlibrary.org/search.json?q={q}&limit=5", timeout=15, verify=False)
-                docs = r.json().get("docs", [])
-                self.after(0, self._show_results, docs)
+                r = requests.get(f"https://www.googleapis.com/books/v1/volumes?q={q}&maxResults=5", timeout=10)
+                items = r.json().get("items", [])
+                self.after(0, self._show_results, items)
             except Exception as e:
                 print(f"DEBUG SEARCH USER REQUEST ERROR: {e}")
-                self.after(0, lambda err=e: self.status.configure(text=f"❌ Hata: {str(err)[:25]}"))
+                self.after(0, lambda err=e: self.safe_update_status(f"❌ Hata: {str(err)[:25]}", APPLE_RED))
                 
         threading.Thread(target=_do_search, daemon=True).start()
 
-    def _show_results(self, docs):
-        self.status.configure(text=f"✅ {len(docs)} sonuç.")
-        for d in docs:
-            t = d.get("title", "Bilinmiyor")
-            a = d.get("author_name", ["Bilinmiyor"])[0]
-            isbn = d.get("isbn", ["000000"])[0]
-            cov = f"https://images-na.ssl-images-amazon.com/images/P/{isbn}.01._SCLZZZZZZZ_SX200_.jpg" if isbn and isbn != "000000" else ""
+    def safe_update_status(self, text, color=APPLE_TEXT_MUTED):
+        try:
+            if self.winfo_exists():
+                self.status.configure(text=text, text_color=color)
+        except:
+            pass
+
+    def _show_results(self, items):
+        self.safe_update_status(f"✅ {len(items)} sonuç.")
+        for item in items:
+            volume_info = item.get("volumeInfo", {})
+            t = volume_info.get("title", "Bilinmiyor")
+            authors = volume_info.get("authors", ["Bilinmiyor"])
+            a = ", ".join(authors) if isinstance(authors, list) else str(authors)
+            
+            isbn = ""
+            identifiers = volume_info.get("industryIdentifiers", [])
+            for idf in identifiers:
+                if idf.get("type") in ("ISBN_13", "ISBN_10"):
+                    isbn = idf.get("identifier")
+                    break
+            if not isbn and identifiers:
+                isbn = identifiers[0].get("identifier", "000000")
+            if not isbn:
+                isbn = "000000"
+                
+            cov = volume_info.get("imageLinks", {}).get("thumbnail", "")
+            if not cov and isbn and isbn != "000000":
+                cov = f"https://images-na.ssl-images-amazon.com/images/P/{isbn}.01._SCLZZZZZZZ_SX200_.jpg"
             self.build_result_card(t, a, isbn, cov)
 
     def build_result_card(self, t, a, i, c_url):

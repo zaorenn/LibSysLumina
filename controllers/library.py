@@ -26,12 +26,11 @@ class BookController:
                 cover_image_url = f"https://images-na.ssl-images-amazon.com/images/P/{isbn}.01._SCLZZZZZZZ_SX200_.jpg"
             else:
                 try:
-                    r = requests.get(f"http://openlibrary.org/search.json?q={title}&limit=1", timeout=5)
-                    docs = r.json().get("docs", [])
-                    if docs:
-                        fetched_isbn = docs[0].get("isbn", [""])[0]
-                        if fetched_isbn:
-                            cover_image_url = f"https://images-na.ssl-images-amazon.com/images/P/{fetched_isbn}.01._SCLZZZZZZZ_SX200_.jpg"
+                    r = requests.get(f"https://www.googleapis.com/books/v1/volumes?q={title}&maxResults=1", timeout=5)
+                    items = r.json().get("items", [])
+                    if items:
+                        volume_info = items[0].get("volumeInfo", {})
+                        cover_image_url = volume_info.get("imageLinks", {}).get("thumbnail", "")
                 except:
                     pass
 

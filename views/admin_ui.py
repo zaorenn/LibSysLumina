@@ -191,20 +191,26 @@ class EditBookModal(ctk.CTkToplevel):
         
         def _fetch():
             try:
-                r = requests.get(f"http://openlibrary.org/search.json?q={t}&limit=1", timeout=5)
-                docs = r.json().get("docs", [])
-                if docs:
-                    key = docs[0].get("key")
-                    r2 = requests.get(f"http://openlibrary.org{key}.json", timeout=5)
-                    desc = r2.json().get("description", "Bu kitap için özet bulunamadı.")
-                    if isinstance(desc, dict): desc = desc.get("value", "")
-                    self.after(0, lambda d=desc: (self.desc_txt.delete("0.0", "end"), self.desc_txt.insert("0.0", d)))
+                r = requests.get(f"https://www.googleapis.com/books/v1/volumes?q={t}&maxResults=1", timeout=8)
+                items = r.json().get("items", [])
+                if items:
+                    volume_info = items[0].get("volumeInfo", {})
+                    desc = volume_info.get("description", "Bu kitap için özet bulunamadı.")
+                    self.after(0, lambda d=desc: self.set_desc_text(d))
                 else:
-                    self.after(0, lambda: (self.desc_txt.delete("0.0", "end"), self.desc_txt.insert("0.0", "Sonuç bulunamadı.")))
-            except:
-                self.after(0, lambda: (self.desc_txt.delete("0.0", "end"), self.desc_txt.insert("0.0", "Hata oluştu.")))
+                    self.after(0, lambda: self.set_desc_text("Sonuç bulunamadı."))
+            except Exception as e:
+                self.after(0, lambda: self.set_desc_text(f"Hata: {str(e)[:30]}"))
                 
         threading.Thread(target=_fetch, daemon=True).start()
+
+    def set_desc_text(self, text):
+        try:
+            if self.winfo_exists():
+                self.desc_txt.delete("0.0", "end")
+                self.desc_txt.insert("0.0", text)
+        except:
+            pass
 
     def save(self):
         desc = self.desc_txt.get("0.0", "end").strip()
@@ -371,27 +377,52 @@ class AdminOpenLibraryView(ctk.CTkFrame):
         
         def _do_search():
             try:
-                import urllib3
-                urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-                r = requests.get(f"http://openlibrary.org/search.json?q={q}&limit=10", timeout=15, verify=False)
-                docs = r.json().get("docs", [])
-                self.after(0, self._show_results, docs)
+                r = requests.get(f"https://www.googleapis.com/books/v1/volumes?q={q}&maxResults=10", timeout=10)
+                items = r.json().get("items", [])
+                self.after(0, self._show_results, items)
             except Exception as e:
                 print(f"DEBUG SEARCH ERROR: {e}")
-                import traceback
-                traceback.print_exc()
-                self.after(0, lambda err=e: self.status.configure(text=f"❌ Hata: {str(err)[:25]}"))
+                self.after(0, lambda err=e: self.safe_update_status(f"❌ Hata: {str(err)[:25]}", APPLE_RED))
                 
         threading.Thread(target=_do_search, daemon=True).start()
 
-    def _show_results(self, docs):
-        self.status.configure(text=f"✅ {len(docs)} sonuç bulundu.")
-        for d in docs:
-            t = d.get("title", "Bilinmiyor")
-            a = d.get("author_name", ["Bilinmiyor"])[0]
-            isbn = d.get("isbn", ["000000000"])[0]
-            sub = d.get("subject", ["Genel"])[0]
-            y = d.get("first_publish_year", 0)
+    def safe_update_status(self, text, color=APPLE_TEXT_MUTED):
+        try:
+            if self.winfo_exists():
+                self.status.configure(text=text, text_color=color)
+        except:
+            pass
+
+    def _show_results(self, items):
+        self.safe_update_status(f"✅ {len(items)} sonuç bulundu.")
+        for item in items:
+            volume_info = item.get("volumeInfo", {})
+            t = volume_info.get("title", "Bilinmiyor")
+            authors = volume_info.get("authors", ["Bilinmiyor"])
+            a = ", ".join(authors) if isinstance(authors, list) else str(authors)
+            
+            isbn = ""
+            identifiers = volume_info.get("industryIdentifiers", [])
+            for idf in identifiers:
+                if idf.get("type") in ("ISBN_13", "ISBN_10"):
+                    isbn = idf.get("identifier")
+                    break
+            if not isbn and identifiers:
+                isbn = identifiers[0].get("identifier", "000000000")
+            if not isbn:
+                isbn = "000000000"
+                
+            sub = volume_info.get("categories", ["Genel"])[0]
+            y_str = volume_info.get("publishedDate", "2024")[:4]
+            try:
+                y = int(y_str)
+            except:
+                y = 2024
+                
+            desc = volume_info.get("description", "")
+            cov_url = volume_info.get("imageLinks", {}).get("thumbnail", "")
+            if not cov_url and isbn and isbn != "000000000":
+                cov_url = f"https://images-na.ssl-images-amazon.com/images/P/{isbn}.01._SCLZZZZZZZ_SX200_.jpg"
             
             c = GlassFrame(self.scroll, height=100)
             c.pack(fill="x", pady=10)
@@ -400,7 +431,7 @@ class AdminOpenLibraryView(ctk.CTkFrame):
             f_left = ctk.CTkFrame(c, fg_color="transparent")
             f_left.pack(side="left", padx=20, pady=10)
             ctk.CTkLabel(f_left, text=f"📖 {t[:60]}", font=ctk.CTkFont(size=18, weight="bold")).pack(anchor="w")
-            ctk.CTkLabel(f_left, text=f"👤 {a} | 🏷️ {sub} | 📅 {y} | ISBN: {isbn}", text_color=APPLE_TEXT_MUTED).pack(anchor="w")
+            ctk.CTkLabel(f_left, text=f"👤 {a[:50]} | 🏷️ {sub[:30]} | 📅 {y} | ISBN: {isbn}", text_color=APPLE_TEXT_MUTED).pack(anchor="w")
             
             f_right = ctk.CTkFrame(c, fg_color="transparent")
             f_right.pack(side="right", padx=20, pady=10)
@@ -408,11 +439,11 @@ class AdminOpenLibraryView(ctk.CTkFrame):
             qty = ctk.CTkEntry(f_right, width=50)
             qty.insert(0, "3")
             qty.pack(side="left", padx=10)
-            AnimatedButton(f_right, text="Ekle", width=80, command=lambda title=t, auth=a, i=isbn, s=sub, yr=y, q_ent=qty: self.add_book(title, auth, i, s, yr, q_ent)).pack(side="left")
+            AnimatedButton(f_right, text="Ekle", width=80, command=lambda title=t, auth=a, i=isbn, s=sub, yr=y, d=desc, img=cov_url, q_ent=qty: self.add_book(title, auth, i, s, yr, d, img, q_ent)).pack(side="left")
 
-    def add_book(self, t, a, i, s, y, q_ent):
+    def add_book(self, t, a, i, s, y, d, img, q_ent):
         try:
-            success, msg = BookController.add_book(t, a, i, s, y, "", "", int(q_ent.get()))
+            success, msg = BookController.add_book(t, a, i, s, y, d, img, int(q_ent.get()))
             if success: messagebox.showinfo("Başarılı", f"{t} başarıyla eklendi!")
             else: messagebox.showerror("Hata", msg)
         except ValueError: messagebox.showerror("Hata", "Adet hatalı.")
