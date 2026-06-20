@@ -2,7 +2,9 @@ import sqlite3
 import bcrypt
 import os
 
-DB_PATH = "library.db"
+# Projenin ana dizinini bularak veritabanı yolunu mutlak (absolute) hale getiriyoruz
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DB_PATH = os.path.join(BASE_DIR, "library.db")
 
 def get_connection():
     return sqlite3.connect(DB_PATH)
