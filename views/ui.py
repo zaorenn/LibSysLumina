@@ -7,6 +7,8 @@ import urllib.request
 import io
 import threading
 import requests
+import urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 IMAGE_CACHE = {}
 IMAGE_LOCK = threading.Lock()
@@ -332,7 +334,7 @@ class CatalogView(ctk.CTkFrame):
         self.scroll = ctk.CTkScrollableFrame(self, fg_color="transparent")
         self.scroll.pack(fill="both", expand=True, padx=40)
         
-        self.scroll.bind("<Configure>", self.on_resize)
+        self.scroll.bind("<Configure>", self.on_resize, add="+")
         
         self.load_books()
 
@@ -370,9 +372,10 @@ class CatalogView(ctk.CTkFrame):
         
     def rearrange_grid(self):
         w = self.scroll.winfo_width()
-        if w < 300: return
+        if w <= 1: return
         cols = max(1, w // 280)
         for i, card in enumerate(self.cards):
+            card.grid_forget()
             card.grid(row=i // cols, column=i % cols, padx=10, pady=15)
 
     def on_borrow(self, book_id):
