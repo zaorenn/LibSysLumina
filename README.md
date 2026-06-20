@@ -1,96 +1,123 @@
-# Lumina Kütüphane Yönetim Sistemi 📚✨
+# LibSys Kütüphane Yönetim Sistemi 📚✨
 
-Lumina, Python, SQLite ve CustomTkinter kullanılarak geliştirilmiş, yüksek estetik standartlara sahip modern bir kütüphane yönetim sistemidir. Bu proje, kullanıcılar (üyeler) ve yöneticiler (admin) için iki ayrı arayüz sunarak güvenli ve gelişmiş bir deneyim sağlar.
+LibSys (Lumina Kütüphane Sistemi), Python, SQLite ve CustomTkinter kullanılarak geliştirilmiş, yüksek estetik standartlara sahip modern bir kütüphane yönetim sistemidir. Kullanıcılar (üyeler) ve yöneticiler (admin) için iki ayrı arayüz sunarak güvenli, performanslı ve kullanıcı dostu bir deneyim sağlar.
 
-![Lumina Banner](https://images.unsplash.com/photo-1507842217343-583bb7270b66?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80)
+![LibSys Banner](https://images.unsplash.com/photo-1507842217343-583bb7270b66?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80)
+
+---
 
 ## 🌟 Öne Çıkan Özellikler
 
 ### 1. İki Farklı Uygulama Mimarisi
-- **Kullanıcı Uygulaması (`main.py`)**: Üyelerin kayıt olup giriş yapabileceği, kitap kataloğunu inceleyebileceği, kitapları ödünç alabileceği ve kendi profilinden iade tarihlerini/cezalarını takip edebileceği son derece modern ve animasyonlu bir arayüz.
-- **Yönetici Paneli (`admin_app.py`)**: Sadece `admin` yetkisine sahip kişilerin girebildiği, kitap, üye ve ödünç işlemlerinin CRUD (Oluştur, Oku, Güncelle, Sil) operasyonlarının yapıldığı özel kontrol paneli.
+- **Kullanıcı Uygulaması (`main.py`)**: Üyelerin hesap oluşturabildiği, giriş yapabildiği, zengin kitap kataloğunu inceleyebildiği, kitapları ödünç alıp iade edebildiği, kendi profilinden iade tarihlerini ve cezalarını takip edebildiği son derece modern ve pürüzsüz (smooth) bir arayüz.
+- **Yönetici Paneli (`admin_app.py`)**: Sadece `admin` yetkisine sahip kişilerin girebildiği, kitap ekleme (internetten otomatik veri çekme destekli), üye yönetimi ve ödünç/iade işlemlerinin detaylı takip edildiği gelişmiş özel kontrol paneli.
 
-### 2. Yüksek Estetik (Premium UI/UX)
+### 2. Yüksek Estetik ve Performans (Premium UI/UX)
 - **Karanlık Tema (Dark Mode)**: Göz yormayan, premium hissiyatlı renk paleti (#121212, #1E1E1E) ve indigo/emerald vurgular.
-- **Dinamik Kitap Kartları**: Kitaplar sıkıcı listeler yerine, kapak resimleri (URL üzerinden dinamik yüklenen) ile şık bir Grid (Izgara) yapısında sergilenir.
-- **Yuvarlatılmış Hatlar ve Şeffaflık**: Tüm butonlar, kartlar ve giriş alanları modern tasarım trendlerine uygun olarak yuvarlatılmıştır.
+- **Dinamik ve Akıcı Kitap Kartları**: Kitaplar, kapak resimleri asenkron olarak arka planda indirilerek şık bir Grid (Izgara) yapısında sergilenir. Optimize edilmiş katalog sistemi sayesinde sayfa kaydırma (scroll) işlemlerinde donma veya kasma yaşanmaz.
+- **Yuvarlatılmış Hatlar ve Şeffaflık**: Tüm butonlar, kartlar ve giriş alanları modern tasarım trendlerine (glassmorphism/rounded UI) uygun olarak tasarlanmıştır.
 
-### 3. Gelişmiş Veritabanı (SQLite)
-- Şifreler `bcrypt` ile hash'lenerek saklanır (Güvenlik).
-- Trigger'lar (Tetikleyiciler) sayesinde stok takibi ve gecikme cezası (günlük 5 TL) hesaplamaları otomatik olarak veritabanı seviyesinde yapılır.
+### 3. Gelişmiş Veritabanı ve Güvenlik (SQLite & Bcrypt)
+- Tüm şifreler `bcrypt` ile hash'lenerek saklanır.
+- Trigger'lar (Tetikleyiciler) sayesinde stok takibi, ödünç durumu güncellemeleri ve gecikme cezası (günlük 5 TL) hesaplamaları otomatik olarak veritabanı seviyesinde gerçekleşir.
 
 ---
 
-## 🛠️ Kurulum ve Çalıştırma
+## 🛠️ Kurulum ve Ön Hazırlık
 
 ### Gereksinimler
-Projeyi çalıştırmak için bilgisayarınızda Python 3.8+ yüklü olmalıdır.
+Projenin sorunsuz çalışabilmesi için sisteminizde **Python 3.8 veya üzeri** bir sürüm yüklü olmalıdır.
 
-1. Proje dizinine gidin.
-2. Gerekli kütüphaneleri yükleyin:
+1. Proje dizinini bilgisayarınıza indirin ve komut satırında (Terminal/CMD) bu dizine gidin:
+   ```bash
+   cd Proje
+   ```
+2. Gerekli Python kütüphanelerini yükleyin:
    ```bash
    pip install -r requirements.txt
    ```
-   *(Bağımlılıklar: customtkinter, bcrypt, pytest, Pillow, requests)*
+   *(Yüklenen bağımlılıklar: customtkinter, bcrypt, pytest, Pillow, requests)*
 
-### Çalıştırma
+---
 
-**Admin Paneli (Veritabanı Yönetimi İçin):**
+## 📖 Uygulamanın Kullanımı
+
+LibSys sistemi 3 ana araç sunar. Bunları sırasıyla nasıl kullanacağınız aşağıda açıklanmıştır:
+
+### 1. Veritabanını Sıfırlama ve Hazırlama (Seed DB)
+Sistemi ilk kez çalıştırıyorsanız veya her şeyi sıfırlayıp **test verileri** (Admin, Örnek Kullanıcı ve Katalogda 100 adet gerçek kitap) ile doldurmak istiyorsanız, sıfırlama script'ini çalıştırmalısınız:
+
+```bash
+python seed_db.py
+```
+*Bu komut veritabanındaki tüm eski bilgileri siler, baştan tablo oluşturur ve sistemi hazır hale getirir. Başarı mesajını aldıktan sonra diğer uygulamalara geçebilirsiniz.*
+
+### 2. Yönetici Paneli (Admin Dashboard)
+Kütüphane görevlisi veya yöneticisi olarak sisteme girip kitap/kullanıcı eklemek için:
+
 ```bash
 python admin_app.py
 ```
+
 > **Varsayılan Yönetici Bilgileri:**
 > Kullanıcı Adı: `admin`
 > Şifre: `admin`
 
-**Kullanıcı Ana Uygulaması (Üyeler İçin):**
+**Admin Olarak Neler Yapabilirsiniz?**
+- **Üye Yönetimi**: Sisteme kayıtlı tüm üyeleri listeleyebilir, çift tıklayarak bir üyenin e-posta, isim, telefon ve hatta şifresini değiştirebilir veya üyeyi silebilirsiniz.
+- **Kitap Yönetimi**: İnternetten Kitap Ekle butonu ile Gutenberg veya OpenLibrary entegrasyonu üzerinden saniyeler içinde yeni kitaplar bulup görselleriyle beraber kütüphaneye dahil edebilirsiniz.
+- **Ödünç Takibi**: Kimin, hangi kitabı, ne zaman aldığını kontrol edebilir, süresi geçenleri listeleyebilirsiniz.
+
+### 3. Kullanıcı Uygulaması (Member App)
+Kütüphane üyelerinin veya öğrencilerin kataloğa göz atması, kitap ödünç alması ve profillerini yönetmesi için:
+
 ```bash
 python main.py
 ```
-> **Varsayılan Üye Bilgileri:**
-> E-posta: `uye@lumina.com`
+
+> **Varsayılan Test Üyesi Bilgileri:**
+> E-posta/Kullanıcı Adı: `uye@lumina.com` veya `uye`
 > Şifre: `uye`
-*(Uygulama üzerinden yeni bir hesap oluşturabilir veya bu varsayılan üye bilgileri ile doğrudan giriş yapabilirsiniz.)*
+
+**Üye Olarak Neler Yapabilirsiniz?**
+- **Katalogda Gezinme**: En yeni eklenen kitapları yüksek performanslı akıcı bir Grid sisteminde inceleyebilirsiniz.
+- **Kitap Ödünç Alma**: Stoğu olan bir kitabı tek tıkla ödünç alabilir, süresi bitmeden önce profilinizden kolayca tek tuşla **İade Et** yapabilirsiniz.
+- **Profil ve Cezalar**: Hesabınızda mevcut cezalarınızı, aktif ödünç kitaplarınızı görebilirsiniz.
+- **Yeni Kayıt**: Eğer üye değilseniz, giriş ekranındaki Kayıt Ol butonuna basarak sadece saniyeler içinde kendi hesabınızı açabilirsiniz (Telefon numarası kısmına sadece rakam girilmesine izin verilmektedir).
 
 ---
 
-## 🧪 Test Senaryoları (Test Cases)
-Proje, temel iş mantığını doğrulamak için `pytest` kullanılarak yazılmış test senaryoları içerir.
-Testleri çalıştırmak için:
+## 🧪 Test Senaryoları (Unit Tests)
+
+Uygulamanın sağlamlığını doğrulamak için `pytest` altyapısı mevcuttur. Testleri çalıştırmak için komut satırına:
+
 ```bash
 pytest tests/
 ```
-Test edilen senaryolar:
-- Admin girişi doğrulaması (Doğru ve yanlış şifre denemeleri).
-- Yeni üye kaydı ve bcrypt şifre doğrulaması.
-- Kitap ekleme işleminin başarılı olması.
-- Kitap ödünç alma (stok düşüşü) ve iade etme (stok artışı) döngüsü.
+Test edilen modüller:
+- Admin giriş doğrulamaları.
+- Üye şifrelerinin `bcrypt` algoritması ile doğru eşleşmesi.
+- Kitap stok düşüşü ve artışının ödünç/iade döngülerinde testi.
 
 ---
 
-## 📂 Proje Yapısı
+## 📂 Proje Dizin Yapısı
 ```text
 Proje/
-│
-├── main.py                # Kullanıcı (Üye) uygulaması başlangıç dosyası
-├── admin_app.py           # Yönetici (Admin) uygulaması başlangıç dosyası
-├── requirements.txt       # Python bağımlılıkları
-├── library.db             # SQLite veritabanı dosyası (Otomatik oluşur)
-│
-├── controllers/           # İş mantığı (Business Logic)
-│   ├── auth.py            # Giriş ve kimlik doğrulama işlemleri
-│   └── library.py         # Kitap, üye ve ödünç alma CRUD işlemleri
-│
-├── models/                # Veri modelleri
-│   └── database.py        # Tablo kurulumları ve Trigger'lar
-│
+├── main.py                # Kullanıcı uygulaması başlatıcısı
+├── admin_app.py           # Yönetici paneli başlatıcısı
+├── seed_db.py             # Veritabanını sıfırlama ve test verisi oluşturma script'i
+├── requirements.txt       # Kütüphane listesi
+├── library.db             # SQLite veritabanı (otomatik oluşur)
+├── controllers/           # Mantık (Giriş, Üye/Kitap yönetimi)
+│   ├── auth.py
+│   └── library.py
+├── models/                # Tablolar, veritabanı ve trigger'lar
+│   └── database.py
 ├── views/                 # Arayüz tasarımları (CustomTkinter)
-│   ├── ui.py              # Kullanıcı uygulaması arayüzü (Katalog, Profil)
-│   └── admin_ui.py        # Yönetici paneli arayüzü (Tablolar, Dashboard)
-│
-└── tests/                 # Pytest test dosyaları
-    └── test_core.py       # Temel test senaryoları
+│   ├── ui.py              # Kullanıcı arayüzleri
+│   └── admin_ui.py        # Admin panel arayüzleri
+└── tests/                 # Otomatik test senaryoları
 ```
 
-## 🎯 Projenin Amacı ve Hedefi
-Bu proje, standart bir okul/kütüphane projesinin ötesine geçerek gerçek dünyada kullanılabilecek seviyede "modern, kullanıcı dostu ve güvenli" bir yazılım geliştirme prensiplerini sergilemeyi amaçlamaktadır. Göz alıcı tasarımıyla sıradan projelerden ayrılır.
+Geliştirme sırasında performans ve kullanıcı deneyimi en üst düzeyde tutulmuştur. İyi kullanımlar! 🎉
