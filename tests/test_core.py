@@ -15,7 +15,7 @@ def teardown_module(module):
     if os.path.exists("test_library.db"): os.remove("test_library.db")
 
 def test_admin_login():
-    assert AuthController.login_admin("admin", "admin123")[0] == True
+    assert AuthController.login_admin("admin", "admin")[0] == True
     assert AuthController.login_admin("admin", "wrong")[0] == False
 
 def test_member_registration_and_login():

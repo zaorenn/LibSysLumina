@@ -29,8 +29,8 @@ class AuthController:
 
     @staticmethod
     def change_admin_password(admin_id, old_pw, new_pw):
-        if len(new_pw) < 7:
-            return False, "Şifre en az 7 karakter olmalıdır."
+        if len(new_pw) < 4:
+            return False, "Şifre en az 4 karakter olmalıdır."
         conn = get_connection()
         cursor = conn.cursor()
         cursor.execute("SELECT password_hash FROM admins WHERE id = ?", (admin_id,))
@@ -52,8 +52,8 @@ class AuthController:
 
     @staticmethod
     def register(name, email, phone, password):
-        if len(password) < 7:
-            return False, "Şifre en az 7 karakter olmalıdır."
+        if len(password) < 4:
+            return False, "Şifre en az 4 karakter olmalıdır."
             
         conn = get_connection()
         cursor = conn.cursor()
@@ -92,8 +92,8 @@ class AuthController:
 
     @staticmethod
     def change_password(member_id, old_password, new_password):
-        if len(new_password) < 7:
-            return False, "Yeni şifre en az 7 karakter olmalıdır."
+        if len(new_password) < 4:
+            return False, "Yeni şifre en az 4 karakter olmalıdır."
             
         conn = get_connection()
         cursor = conn.cursor()

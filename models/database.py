@@ -227,20 +227,20 @@ def init_db():
     except sqlite3.OperationalError:
         pass
 
-    # Varsayılan Admin Hesabını Oluştur (admin / admin123)
+    # Varsayılan Admin Hesabını Oluştur (admin / admin)
     cursor.execute("SELECT COUNT(*) FROM admins")
     if cursor.fetchone()[0] == 0:
         salt = bcrypt.gensalt()
-        hashed = bcrypt.hashpw(b"admin123", salt).decode('utf-8')
+        hashed = bcrypt.hashpw(b"admin", salt).decode('utf-8')
         cursor.execute("INSERT INTO admins (username, password_hash, name, email) VALUES (?, ?, ?, ?)", ("admin", hashed, "Sistem Yöneticisi", "admin@lumina.com"))
         
-    # Varsayılan Üye Hesabını Oluştur (uye@lumina.com / uye123)
+    # Varsayılan Üye Hesabını Oluştur (uye@lumina.com / uye)
     cursor.execute("SELECT COUNT(*) FROM members")
     if cursor.fetchone()[0] == 0:
         salt = bcrypt.gensalt()
-        hashed = bcrypt.hashpw(b"uye123", salt).decode('utf-8')
+        hashed = bcrypt.hashpw(b"uye", salt).decode('utf-8')
         cursor.execute("INSERT INTO members (name, email, phone, password_hash, is_approved) VALUES (?, ?, ?, ?, 1)",
-                       ("Örnek Üye", "uye@lumina.com", "5551234567", hashed))
+                       ("Üye", "uye@lumina.com", "5551234567", hashed))
 
     # Varsayılan 100 Kitabı Ekle
     cursor.execute("SELECT COUNT(*) FROM books")

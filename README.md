@@ -41,7 +41,7 @@ python admin_app.py
 ```
 > **Varsayılan Yönetici Bilgileri:**
 > Kullanıcı Adı: `admin`
-> Şifre: `admin123`
+> Şifre: `admin`
 
 **Kullanıcı Ana Uygulaması (Üyeler İçin):**
 ```bash
@@ -49,7 +49,7 @@ python main.py
 ```
 > **Varsayılan Üye Bilgileri:**
 > E-posta: `uye@lumina.com`
-> Şifre: `uye123`
+> Şifre: `uye`
 *(Uygulama üzerinden yeni bir hesap oluşturabilir veya bu varsayılan üye bilgileri ile doğrudan giriş yapabilirsiniz.)*
 
 ---

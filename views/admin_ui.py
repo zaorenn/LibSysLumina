@@ -279,13 +279,76 @@ class AdminMembersView(ctk.CTkFrame):
     def on_double(self, e):
         sel = self.tree.selection()
         if sel:
-            if messagebox.askyesno("Sil", "Bu üyeyi sistemden silmek istediğinize emin misiniz? (Ödünç geçmişi 'Tüm Ödünç Geçmişi' sekmesinde tutulmaya devam edecektir)"):
-                success, msg = MemberController.delete_member(self.tree.item(sel, "values")[0])
-                if success: self.refresh()
-                else: messagebox.showerror("Hata", msg)
+            EditMemberModal(self.winfo_toplevel(), self.tree.item(sel, "values"), self.refresh)
 
     def manual_add(self):
         AddMemberModal(self.winfo_toplevel(), self.refresh)
+
+class EditMemberModal(ctk.CTkToplevel):
+    def __init__(self, parent, vals, on_complete):
+        super().__init__(parent)
+        self.title("👤 Üye Düzenle")
+        self.geometry("450x600")
+        self.configure(fg_color=APPLE_PANEL)
+        self.on_complete = on_complete
+        self.mid = vals[0]
+        self.vals = vals
+        self.grab_set()
+        
+        ctk.CTkLabel(self, text="Üye Detayları & Düzenleme", font=ctk.CTkFont(size=24, weight="bold")).pack(pady=20)
+        
+        vcmd = (self.register(self.validate_phone), "%P")
+        self.ents = {}
+        fields = [("Ad Soyad", vals[1]), ("E-posta", vals[2]), ("Telefon", vals[3]), ("Yeni Şifre (İsteğe Bağlı)", "")]
+        for pl, val in fields:
+            if pl == "Telefon":
+                e = ctk.CTkEntry(self, placeholder_text=pl, width=350, height=40, validate="key", validatecommand=vcmd)
+            else:
+                e = ctk.CTkEntry(self, placeholder_text=pl, width=350, height=40)
+                if "Şifre" in pl:
+                    e.configure(show="●")
+            e.insert(0, val)
+            e.pack(pady=10)
+            self.ents[pl] = e
+            
+        AnimatedButton(self, text="Değişiklikleri Kaydet", width=350, height=45, command=self.save).pack(pady=10)
+        AnimatedButton(self, text="Üyeyi Sil", width=350, height=45, fg_color=APPLE_RED, command=self.delete_member).pack(pady=10)
+
+    def validate_phone(self, p):
+        if p == "":
+            return True
+        return p.isdigit()
+
+    def save(self):
+        name = self.ents["Ad Soyad"].get().strip()
+        email = self.ents["E-posta"].get().strip()
+        phone = self.ents["Telefon"].get().strip()
+        pwd = self.ents["Yeni Şifre (İsteğe Bağlı)"].get()
+        
+        if not name or not email or not phone:
+            messagebox.showerror("Hata", "Ad Soyad, E-posta ve Telefon alanları boş bırakılamaz.")
+            return
+            
+        if not phone.isdigit():
+            messagebox.showerror("Hata", "Telefon numarası sadece rakamlardan oluşmalıdır.")
+            return
+            
+        succ, msg = MemberController.update_member_admin(self.mid, name, email, phone, pwd)
+        if succ:
+            messagebox.showinfo("Başarılı", msg)
+            self.on_complete()
+            self.destroy()
+        else:
+            messagebox.showerror("Hata", msg)
+            
+    def delete_member(self):
+        if messagebox.askyesno("Sil", "Bu üyeyi sistemden silmek istediğinize emin misiniz? (Ödünç geçmişi 'Tüm Ödünç Geçmişi' sekmesinde tutulmaya devam edecektir)"):
+            success, msg = MemberController.delete_member(self.mid)
+            if success:
+                self.on_complete()
+                self.destroy()
+            else:
+                messagebox.showerror("Hata", msg)
 
 class AddMemberModal(ctk.CTkToplevel):
     def __init__(self, parent, on_complete):
@@ -298,16 +361,30 @@ class AddMemberModal(ctk.CTkToplevel):
         
         ctk.CTkLabel(self, text="Yeni Üye Bilgileri", font=ctk.CTkFont(size=24, weight="bold")).pack(pady=20)
         self.ents = {}
+        vcmd = (self.register(self.validate_phone), "%P")
         for pl in ["Ad Soyad", "E-posta", "Telefon", "Şifre"]:
-            e = ctk.CTkEntry(self, placeholder_text=pl, width=350, height=40)
-            if pl == "Şifre": e.configure(show="●")
+            if pl == "Telefon":
+                e = ctk.CTkEntry(self, placeholder_text=pl, width=350, height=40, validate="key", validatecommand=vcmd)
+            else:
+                e = ctk.CTkEntry(self, placeholder_text=pl, width=350, height=40)
+                if pl == "Şifre": e.configure(show="●")
             e.pack(pady=10)
             self.ents[pl] = e
             
         AnimatedButton(self, text="Ekle ve Aktifleştir", width=350, height=45, command=self.save).pack(pady=20)
+
+    def validate_phone(self, p):
+        if p == "":
+            return True
+        return p.isdigit()
         
     def save(self):
-        succ, msg = AuthController.register(self.ents["Ad Soyad"].get(), self.ents["E-posta"].get(), self.ents["Telefon"].get(), self.ents["Şifre"].get())
+        phone = self.ents["Telefon"].get().strip()
+        if not phone.isdigit():
+            messagebox.showerror("Hata", "Telefon numarası sadece rakamlardan oluşmalıdır.")
+            return
+            
+        succ, msg = AuthController.register(self.ents["Ad Soyad"].get(), self.ents["E-posta"].get(), phone, self.ents["Şifre"].get())
         if succ:
             conn = get_connection()
             cursor = conn.cursor()
@@ -318,6 +395,7 @@ class AddMemberModal(ctk.CTkToplevel):
             self.destroy()
         else:
             messagebox.showerror("Hata", msg)
+
 
 class AdminBorrowsView(ctk.CTkFrame):
     def __init__(self, master):
@@ -378,13 +456,58 @@ class AdminOpenLibraryView(ctk.CTkFrame):
         def _do_search():
             try:
                 r = requests.get(f"https://www.googleapis.com/books/v1/volumes?q={q}&maxResults=10", timeout=10)
-                items = r.json().get("items", [])
-                self.after(0, self._show_results, items)
+                if r.status_code == 200:
+                    items = r.json().get("items", [])
+                    if items:
+                        self.after(0, self._show_results, items)
+                    else:
+                        self._do_gutenberg_search(q)
+                else:
+                    self._do_gutenberg_search(q)
             except Exception as e:
                 print(f"DEBUG SEARCH ERROR: {e}")
-                self.after(0, lambda err=e: self.safe_update_status(f"❌ Hata: {str(err)[:25]}", APPLE_RED))
+                self._do_gutenberg_search(q)
                 
         threading.Thread(target=_do_search, daemon=True).start()
+
+    def _do_gutenberg_search(self, q):
+        try:
+            r = requests.get(f"https://gutendex.com/books/?search={q}", timeout=10)
+            results = r.json().get("results", [])
+            self.after(0, self._show_gutenberg_results, results)
+        except Exception as e:
+            self.after(0, lambda err=e: self.safe_update_status(f"❌ Hata: {str(err)[:25]}", APPLE_RED))
+
+    def _show_gutenberg_results(self, results):
+        self.safe_update_status(f"✅ {len(results)} sonuç bulundu (Gutenberg).")
+        for book in results:
+            t = book.get("title", "Bilinmiyor")
+            authors = book.get("authors", [])
+            a = ", ".join([auth.get("name", "Bilinmiyor") for auth in authors]) if authors else "Bilinmiyor"
+            isbn = f"GUT{book.get('id', '000')}"
+            
+            subjects = book.get("subjects", [])
+            sub = subjects[0].split("--")[0].strip() if subjects else "Genel"
+            y = 2024
+            desc = f"{t} by {a}."
+            cov_url = book.get("formats", {}).get("image/jpeg", "")
+            
+            c = GlassFrame(self.scroll, height=100)
+            c.pack(fill="x", pady=10)
+            c.pack_propagate(False)
+            
+            f_left = ctk.CTkFrame(c, fg_color="transparent")
+            f_left.pack(side="left", padx=20, pady=10)
+            ctk.CTkLabel(f_left, text=f"📖 {t[:60]}", font=ctk.CTkFont(size=18, weight="bold")).pack(anchor="w")
+            ctk.CTkLabel(f_left, text=f"👤 {a[:50]} | 🏷️ {sub[:30]} | 📅 {y} | ISBN: {isbn}", text_color=APPLE_TEXT_MUTED).pack(anchor="w")
+            
+            f_right = ctk.CTkFrame(c, fg_color="transparent")
+            f_right.pack(side="right", padx=20, pady=10)
+            ctk.CTkLabel(f_right, text="Adet:").pack(side="left", padx=5)
+            qty = ctk.CTkEntry(f_right, width=50)
+            qty.insert(0, "3")
+            qty.pack(side="left", padx=10)
+            AnimatedButton(f_right, text="Ekle", width=80, command=lambda title=t, auth=a, i=isbn, s=sub, yr=y, d=desc, img=cov_url, q_ent=qty: self.add_book(title, auth, i, s, yr, d, img, q_ent)).pack(side="left")
 
     def safe_update_status(self, text, color=APPLE_TEXT_MUTED):
         try:
@@ -570,7 +693,7 @@ class AdminProfileView(ctk.CTkFrame):
         
         self.e_old_pw = ctk.CTkEntry(f2, placeholder_text="Mevcut Şifre", show="●", width=300, height=36)
         self.e_old_pw.pack(anchor="w", padx=20, pady=5)
-        self.e_new_pw1 = ctk.CTkEntry(f2, placeholder_text="Yeni Şifre (En az 7 karakter)", show="●", width=300, height=36)
+        self.e_new_pw1 = ctk.CTkEntry(f2, placeholder_text="Yeni Şifre (En az 4 karakter)", show="●", width=300, height=36)
         self.e_new_pw1.pack(anchor="w", padx=20, pady=5)
         self.e_new_pw2 = ctk.CTkEntry(f2, placeholder_text="Yeni Şifre (Tekrar)", show="●", width=300, height=36)
         self.e_new_pw2.pack(anchor="w", padx=20, pady=5)

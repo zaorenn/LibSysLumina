@@ -123,15 +123,13 @@ class CatalogCard(GlassFrame):
 
         def _fetch():
             try:
-                import ssl
-                context = ssl._create_unverified_context()
-                req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-                raw_data = urllib.request.urlopen(req, timeout=10, context=context).read()
-                img = Image.open(io.BytesIO(raw_data))
-                with IMAGE_LOCK:
-                    IMAGE_CACHE[url] = img
-                ctk_img = ctk.CTkImage(img, size=(120, 160))
-                self.cover_lbl.after(0, lambda: self.cover_lbl.configure(image=ctk_img, text=""))
+                r = requests.get(url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}, timeout=10, verify=False)
+                if r.status_code == 200 and len(r.content) > 100:
+                    img = Image.open(io.BytesIO(r.content))
+                    with IMAGE_LOCK:
+                        IMAGE_CACHE[url] = img
+                    ctk_img = ctk.CTkImage(img, size=(120, 160))
+                    self.cover_lbl.after(0, lambda: self.cover_lbl.configure(image=ctk_img, text=""))
             except Exception as e:
                 pass
         threading.Thread(target=_fetch, daemon=True).start()
@@ -210,15 +208,13 @@ class BookDetailModal(ctk.CTkToplevel):
 
         def _fetch():
             try:
-                import ssl
-                context = ssl._create_unverified_context()
-                req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-                raw_data = urllib.request.urlopen(req, timeout=10, context=context).read()
-                img = Image.open(io.BytesIO(raw_data))
-                with IMAGE_LOCK:
-                    IMAGE_CACHE[url] = img
-                ctk_img = ctk.CTkImage(img, size=(160, 240))
-                self.cover_lbl.after(0, lambda: self.cover_lbl.configure(image=ctk_img, text=""))
+                r = requests.get(url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}, timeout=10, verify=False)
+                if r.status_code == 200 and len(r.content) > 100:
+                    img = Image.open(io.BytesIO(r.content))
+                    with IMAGE_LOCK:
+                        IMAGE_CACHE[url] = img
+                    ctk_img = ctk.CTkImage(img, size=(160, 240))
+                    self.cover_lbl.after(0, lambda: self.cover_lbl.configure(image=ctk_img, text=""))
             except Exception as e:
                 pass
         threading.Thread(target=_fetch, daemon=True).start()
@@ -233,6 +229,11 @@ class AuthModal(ctk.CTkToplevel):
         self.grab_set() 
         self.current_frame = None
         self.show_login()
+
+    def validate_phone(self, p):
+        if p == "":
+            return True
+        return p.isdigit()
 
     def show_login(self):
         if self.current_frame: self.current_frame.destroy()
@@ -266,7 +267,9 @@ class AuthModal(ctk.CTkToplevel):
         self.r_name.pack(pady=5)
         self.r_email = ctk.CTkEntry(self.current_frame, placeholder_text="E-posta", width=260, height=36, corner_radius=6)
         self.r_email.pack(pady=5)
-        self.r_phone = ctk.CTkEntry(self.current_frame, placeholder_text="Telefon", width=260, height=36, corner_radius=6)
+        
+        vcmd = (self.register(self.validate_phone), "%P")
+        self.r_phone = ctk.CTkEntry(self.current_frame, placeholder_text="Telefon", width=260, height=36, corner_radius=6, validate="key", validatecommand=vcmd)
         self.r_phone.pack(pady=5)
         self.r_pass = ctk.CTkEntry(self.current_frame, placeholder_text="Şifre", show="●", width=260, height=36, corner_radius=6)
         self.r_pass.pack(pady=5)
@@ -278,6 +281,7 @@ class AuthModal(ctk.CTkToplevel):
         self.err = ctk.CTkLabel(self.current_frame, text="", text_color=APPLE_RED)
         self.err.pack()
         ctk.CTkButton(self.current_frame, text="Geri Dön", fg_color="transparent", hover_color=APPLE_PANEL, text_color=APPLE_TEXT_MUTED, command=self.show_login).pack(side="bottom", pady=20)
+
 
     def toggle_pw(self, entry, chk):
         if chk.get() == 1: entry.configure(show="")
@@ -292,7 +296,11 @@ class AuthModal(ctk.CTkToplevel):
             self.err.configure(text=msg)
             
     def do_register(self):
-        succ, msg = AuthController.register(self.r_name.get(), self.r_email.get(), self.r_phone.get(), self.r_pass.get())
+        phone = self.r_phone.get().strip()
+        if not phone.isdigit():
+            self.err.configure(text="Hata: Telefon numarası sadece rakam içermelidir.")
+            return
+        succ, msg = AuthController.register(self.r_name.get(), self.r_email.get(), phone, self.r_pass.get())
         if succ:
             messagebox.showinfo("Başarılı", msg)
             self.show_login()
@@ -324,11 +332,7 @@ class CatalogView(ctk.CTkFrame):
         self.scroll = ctk.CTkScrollableFrame(self, fg_color="transparent")
         self.scroll.pack(fill="both", expand=True, padx=40)
         
-        self.grid_frame = ctk.CTkFrame(self.scroll, fg_color="transparent")
-        self.grid_frame.pack(fill="both", expand=True)
-        
         self.scroll.bind("<Configure>", self.on_resize)
-        self.scroll._parent_canvas.bind("<MouseWheel>", self.on_scroll, add="+")
         
         self.load_books()
 
@@ -356,7 +360,7 @@ class CatalogView(ctk.CTkFrame):
         self.books.extend(new_books)
         self.offset += len(new_books)
         for b in new_books:
-            card = CatalogCard(self.grid_frame, b, self.on_borrow)
+            card = CatalogCard(self.scroll, b, self.on_borrow)
             self.cards.append(card)
         self.rearrange_grid()
         self.is_loading = False
@@ -370,10 +374,6 @@ class CatalogView(ctk.CTkFrame):
         cols = max(1, w // 280)
         for i, card in enumerate(self.cards):
             card.grid(row=i // cols, column=i % cols, padx=10, pady=15)
-            
-    def on_scroll(self, event):
-        if self.scroll._parent_canvas.yview()[1] > 0.95:
-            self.load_books()
 
     def on_borrow(self, book_id):
         if not self.main_app.user:
@@ -407,7 +407,7 @@ class ProfileView(ctk.CTkFrame):
         
         self.old_pw = ctk.CTkEntry(pw_frame, placeholder_text="Mevcut Şifre", show="●", width=300, height=36)
         self.old_pw.pack(anchor="w", padx=20, pady=5)
-        self.new_pw1 = ctk.CTkEntry(pw_frame, placeholder_text="Yeni Şifre", show="●", width=300, height=36)
+        self.new_pw1 = ctk.CTkEntry(pw_frame, placeholder_text="Yeni Şifre (En az 4 karakter)", show="●", width=300, height=36)
         self.new_pw1.pack(anchor="w", padx=20, pady=5)
         self.new_pw2 = ctk.CTkEntry(pw_frame, placeholder_text="Yeni Şifre (Tekrar)", show="●", width=300, height=36)
         self.new_pw2.pack(anchor="w", padx=20, pady=5)
@@ -569,13 +569,33 @@ class UserRequestView(ctk.CTkFrame):
         def _do_search():
             try:
                 r = requests.get(f"https://www.googleapis.com/books/v1/volumes?q={q}&maxResults=5", timeout=10)
-                items = r.json().get("items", [])
-                self.after(0, self._show_results, items)
+                if r.status_code == 200:
+                    items = r.json().get("items", [])
+                    self.after(0, self._show_results, items)
+                else:
+                    self._do_gutenberg_search(q)
             except Exception as e:
-                print(f"DEBUG SEARCH USER REQUEST ERROR: {e}")
-                self.after(0, lambda err=e: self.safe_update_status(f"❌ Hata: {str(err)[:25]}", APPLE_RED))
+                self._do_gutenberg_search(q)
                 
         threading.Thread(target=_do_search, daemon=True).start()
+
+    def _do_gutenberg_search(self, q):
+        try:
+            r = requests.get(f"https://gutendex.com/books/?search={q}", timeout=10)
+            results = r.json().get("results", [])
+            self.after(0, self._show_gutenberg_results, results)
+        except Exception as e:
+            self.after(0, lambda err=e: self.safe_update_status(f"❌ Hata: {str(err)[:25]}", APPLE_RED))
+
+    def _show_gutenberg_results(self, results):
+        self.safe_update_status(f"✅ {len(results)} sonuç (Gutenberg).")
+        for book in results:
+            t = book.get("title", "Bilinmiyor")
+            authors = book.get("authors", [])
+            a = ", ".join([auth.get("name", "Bilinmiyor") for auth in authors]) if authors else "Bilinmiyor"
+            isbn = f"GUT{book.get('id', '000')}"
+            cov = book.get("formats", {}).get("image/jpeg", "")
+            self.build_result_card(t, a, isbn, cov)
 
     def safe_update_status(self, text, color=APPLE_TEXT_MUTED):
         try:
@@ -767,7 +787,7 @@ class ForcePasswordModal(ctk.CTkToplevel):
         
         self.old_pw = ctk.CTkEntry(self, placeholder_text="Yöneticinin Verdiği Şifre (Mevcut)", show="●", width=300, height=36)
         self.old_pw.pack(pady=5)
-        self.new_pw1 = ctk.CTkEntry(self, placeholder_text="Yeni Şifre (En az 7 karakter)", show="●", width=300, height=36)
+        self.new_pw1 = ctk.CTkEntry(self, placeholder_text="Yeni Şifre (En az 4 karakter)", show="●", width=300, height=36)
         self.new_pw1.pack(pady=5)
         self.new_pw2 = ctk.CTkEntry(self, placeholder_text="Yeni Şifre Tekrar", show="●", width=300, height=36)
         self.new_pw2.pack(pady=5)

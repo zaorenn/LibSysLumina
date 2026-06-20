@@ -37,6 +37,17 @@ class BookController:
         conn = get_connection()
         cursor = conn.cursor()
         try:
+            # Check if ISBN already exists. If yes, increment total_copies and available_copies
+            cursor.execute("SELECT id, total_copies, available_copies FROM books WHERE isbn = ?", (isbn,))
+            row = cursor.fetchone()
+            if row:
+                b_id, current_tot, current_avl = row
+                new_tot = current_tot + total_copies
+                new_avl = current_avl + total_copies
+                cursor.execute("UPDATE books SET total_copies = ?, available_copies = ? WHERE id = ?", (new_tot, new_avl, b_id))
+                conn.commit()
+                return True, "Kitap zaten kayıtlıydı, stok miktarı artırıldı."
+
             cursor.execute('''INSERT INTO books 
                            (title, author, isbn, category, published_year, description, cover_image_url, total_copies, available_copies) 
                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''', 
@@ -156,6 +167,31 @@ class MemberController:
             return False, str(e)
         finally:
             conn.close()
+
+    @staticmethod
+    def update_member_admin(member_id, name, email, phone, password=None):
+        conn = get_connection()
+        cursor = conn.cursor()
+        try:
+            if password and password.strip() != "":
+                if len(password) < 4:
+                    return False, "Şifre en az 4 karakter olmalıdır."
+                salt = bcrypt.gensalt()
+                hashed = bcrypt.hashpw(password.encode('utf-8'), salt).decode('utf-8')
+                cursor.execute("UPDATE members SET name = ?, email = ?, phone = ?, password_hash = ?, must_change_password = 1 WHERE id = ?", 
+                               (name, email, phone, hashed, member_id))
+            else:
+                cursor.execute("UPDATE members SET name = ?, email = ?, phone = ? WHERE id = ?", 
+                               (name, email, phone, member_id))
+            conn.commit()
+            return True, "Üye bilgileri başarıyla güncellendi."
+        except sqlite3.IntegrityError:
+            return False, "Bu e-posta adresi zaten kullanımda."
+        except Exception as e:
+            return False, str(e)
+        finally:
+            conn.close()
+
 
 class BorrowController:
     @staticmethod
